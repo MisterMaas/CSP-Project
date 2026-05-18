@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.random as random
 from typing import TYPE_CHECKING
+from scipy.sparse import lil_matrix, csr_matrix
 if TYPE_CHECKING:
     from Model import Model
 
@@ -76,8 +77,9 @@ class Cell:
             """
             # First we initiate a nxn matrix containing
             # only zero values. We do the same for the
-            # threshold map
-            self.GRN = np.zeros((number_of_genes, number_of_genes), dtype=int)
+            # threshold map. We use a sparse matrix (containing
+            # only few non-zero elements) for optimization.
+            self.GRN = self.GRN = np.zeros((number_of_genes, number_of_genes), dtype=np.int8)
 
             # We then go over all the n genes in the genome.
             for i in range(number_of_genes):
@@ -147,21 +149,16 @@ class Cell:
             # to be the current
             self.Genome[2] = self.Genome[3]
             # Then we update the current expression
-            # using the last expression
-            for i, thres in enumerate(self.Genome[1]):
-                update_value = 0
-                for j , weight in enumerate(self.GRN[:,i]):
-                    # We sum the weight times the expression
-                    # of the genome
-                    update_value += weight * self.Genome[2,j]
-                # According to this threshold value one
-                # of three senarios occurs:
-                if update_value < thres:
-                    self.Genome[3,i] = 0
-                elif update_value == thres:
-                    self.Genome[3,i] = self.Genome[2,i]
-                elif update_value > thres:
-                    self.Genome[3,i] = 1
+            # using the last expression.
+            update_values = self.Genome[2] @ self.GRN
+            # We take the threshold values
+            thres = self.Genome[1]
+            # And update the genome using vectorisation logic
+            new_expr = np.where(update_values > thres, 1,
+                                np.where(update_values == thres, self.Genome[2], 0))
+            # We set this to the new expression of the
+            # gene
+            self.Genome[3] = new_expr
 
         def UpdateExpressionPattern():
             # We go over all the genes in the genome
@@ -170,18 +167,18 @@ class Cell:
             # it will be active int the expression patern.
             # Otherwise it will be 0.
             target_length = len(self.Model.Target)
+            # We initialize the exprission pattern as a vector
+            # only containing zeros
             self.ExpressionPattern = np.zeros(target_length)
-
-            alive = False
-            for i, gene_id in enumerate(self.Genome[0]):
-                if self.Genome[3, i] == 1:
-                    # We use the ID to mark the specific type as active
-                    # Ensure the ID is cast to int and within bounds
-                    idx = int(gene_id) - 1
-                    if 0 <= idx < target_length:
-                        self.ExpressionPattern[idx] = 1
-                        alive = True
-            return alive
+            # We make a vector containing all active genes
+            active_ids = self.Genome[0, self.Genome[3] == 1].astype(int) - 1
+            # We transform this into a boolean array which says wether
+            # index is valid
+            valid = active_ids[(active_ids >= 0) & (active_ids < target_length)]
+            # For all these valid expressions we fill in a 1
+            self.ExpressionPattern[valid] = 1
+            # We return false if there are no valid expressions
+            return valid.size > 0
 
         # We do not preform propagation when the
         # cell is stable:
@@ -222,8 +219,6 @@ class Cell:
                p_wei_c=2e-5, p_per_c=2e-5):
 
         def gene_duplication():
-            if self.NumberOfGenes >= 60:
-                return True
             idx = random.randint(0, self.Genome.shape[1])
             col = random.randint(0, self.Genome.shape[1])
             # Copy a random gene column
