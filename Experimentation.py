@@ -138,9 +138,9 @@ def plot_runs(filenames: list[str], titles: list[str] = None):
 
 
 def run_experiment(i):
-    max_time_steps = 10000
+    max_time_steps = 600000
     lamb = 3e-4
-    experiment_run = 1
+    experiment_run = 9
     buffer = []
 
     model = Model()
@@ -149,7 +149,7 @@ def run_experiment(i):
         for t in range(max_time_steps):
             if t %10000==0:
                 end = time.time()
-                print(f"{t}/{max_time_steps}: {end - start} seconds")
+                print(f"Run {i}: {t}/{max_time_steps}: {(end - start):.3f} seconds")
                 start = time.time()
             if random() < lamb:
                 model.SwitchTarget()
@@ -173,12 +173,17 @@ def run_experiment(i):
 if __name__ == '__main__':
     amount_of_runs = 5
 
+    """"
+    Run model on higher mutation rate,
+    same death count and lower fitness power.
+    """
+
     start = time.time()
     # with Pool() as pool:
     #     pool.map(run_experiment, range(amount_of_runs))
     end = time.time()
     print(f"Total runtime {end - start} seconds")
 
-    experiment_run = 1
+    experiment_run = 8
     files = [f"Data/Data-{experiment_run}.{i}.txt" for i in range(amount_of_runs)]
-    plot_runs(files)
+    plot_run(files[1])

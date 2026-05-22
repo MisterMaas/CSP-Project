@@ -8,7 +8,10 @@ class Model:
     DeathRate = 0.1
     xSize = 100
     ySize = 50
-    FitnessPower = 10
+
+    FitnessPower = 1
+    MutationFactor = 1
+
     Grid : np.array
     NextGrid : np.array
 
@@ -26,7 +29,7 @@ class Model:
     Target      : np.array
     TargetID= "A"
 
-    def __init__(self, death_rate=0.1, fitness_power=10):
+    def __init__(self, death_rate=0.1, fitness_power= 1, mutation_factor=15):
         def FindTargets(expression_pattern: np.array):
             # Find the two targets
             def flip_expression(indices, original):
@@ -34,20 +37,28 @@ class Model:
                 flipped[indices] ^= 1
                 return flipped
 
-            # Generate target A
-            a_number = random.randint(5, 21)
-            a_indices = random.choice(20, size=a_number, replace=False)
-            self.TargetA = flip_expression(a_indices, expression_pattern)
+            print(f"Initial Exp: {expression_pattern}")
+            # We first iniitialize the target as zeros
+            self.TargetA = np.zeros(20)
+            self.TargetB = np.zeros(20)
 
+            while not self.TargetA.any():
+                # Generate target A
+                a_number = random.randint(5, 21)
+                a_indices = random.choice(20, size=a_number, replace=False)
+                self.TargetA = flip_expression(a_indices, expression_pattern)
+
+            print(f"Target A: {self.TargetA}")
             # Generate target B, retrying until hamming distance from A is at least 7
             hamming_A_to_B = 0
-            while hamming_A_to_B < 7:
+            while hamming_A_to_B < 7 and not self.TargetB.any():
                 b_number = random.randint(5, 21)
                 b_indices = random.choice(20, size=b_number, replace=False)
                 self.TargetB= flip_expression(b_indices, expression_pattern)
                 # Then we calculate the hamming distance
                 hamming_A_to_B = np.sum(self.TargetA != self.TargetB)
 
+            print(f"Target B: {self.TargetB}")
             # Set target to A by default
             self.Target = self.TargetA
 
@@ -68,6 +79,8 @@ class Model:
                     else:
                         self.Grid[i, j] = Cell.CopyCell(parent)
                         populated +=1
+
+        self.MutationFactor = mutation_factor
 
         # We create a random new cell
         cell = Cell(self, 20)
@@ -127,7 +140,7 @@ class Model:
             # mutates and we execute propagation.
             self.NextGrid[i, j] = Cell.CopyCell(best_parent)
             # Mutate returns false if the cell has died
-            if not self.NextGrid[i, j].Mutate():
+            if not self.NextGrid[i, j].Mutate(mutation_factor=self.MutationFactor):
                 self.NextGrid[i, j] = None
                 return
 
@@ -188,6 +201,8 @@ class Model:
                 self.MeanDistance = 0
                 self.STDDDistance = 0
                 self.MinimalDistance = 20
+
+        self.Timestep += 1
 
         # We make sure that the Next Grid is empty
         # This is the place where all the updated cells

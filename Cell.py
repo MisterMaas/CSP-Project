@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.random as random
 from typing import TYPE_CHECKING
-from scipy.sparse import lil_matrix, csr_matrix
+import math
 if TYPE_CHECKING:
     from Model import Model
 
@@ -210,13 +210,15 @@ class Cell:
     def UpdateFitness(self):
         # First we have to calculate the hamming distance
         self.HammingDistance = np.sum(self.ExpressionPattern != self.Model.Target)
-        self.Fitness = (1 - (self.HammingDistance / self.NumberOfGenes)) ** self.Model.FitnessPower
+        max_possible_distance = len(self.Model.Target)
+        self.Fitness = (1 - (self.HammingDistance / max_possible_distance)) ** self.Model.FitnessPower
 
     def Mutate(self, mutation_factor=1,
                p_g_dup=2e-4, p_g_del=3e-4,
                p_thres=5e-6, p_b_dup=2e-5,
                p_b_del=3e-5, p_innov=1e-5,
-               p_wei_c=2e-5, p_per_c=2e-5):
+               p_wei_c=2e-5, p_per_c=2e-5,
+               del_per=3e-5, dup_per=2e-5):
 
         def gene_duplication():
             idx = random.randint(0, self.Genome.shape[1])
@@ -236,14 +238,19 @@ class Cell:
             # If it's the last copy of that type, deleting it would make
             # that type go extinct, so we abort.
             gene_id = self.Genome[0, idx]
-            copies = np.sum(self.Genome[0] == gene_id)
-            if copies <= 1:
-                return False
+            # We select a gene
             self.Genome = np.delete(self.Genome, idx, axis=1)
             self.GRN = np.delete(self.GRN, idx, axis=0)
             self.GRN = np.delete(self.GRN, idx, axis=1)
             self.NumberOfGenes -= 1
-            return True
+            # We check if there are duplecates in the
+            # genes
+            copies = np.sum(self.Genome[0] == gene_id)
+            # If there are no duplacates, the cell dies
+            if copies < 1:
+                return False
+            else:
+                return True
 
         def threshold_change():
             idx = random.randint(0, self.Genome.shape[1])
@@ -299,17 +306,58 @@ class Cell:
             self.GRN[new_regulator, gene] = weight
             return True
 
+        def delete_percentage(p=0.15):
+            # We decide how many cells will be deleted
+            portion = math.floor(self.NumberOfGenes*p)
+            # Then we indicate a starting index
+            start = random.randint(0, self.NumberOfGenes - portion)
+            delete_indexes = np.arange(portion) + start
+            # Find the index of insertion
+            insert = random.randint(0, self.NumberOfGenes)
+            # We perform the deletion
+            self.Genome = np.delete(self.Genome, delete_indexes, axis=1)
+            self.GRN = np.delete(self.GRN, delete_indexes, axis=0)
+            self.GRN = np.delete(self.GRN, delete_indexes, axis=1)
+            self.NumberOfGenes -= portion
+            # We check if there are duplecates in the
+            # genes
+            # If there are no duplacates, the cell dies
+            unique = np.unique(self.Genome[0])
+            return len(unique) == 20
+
+        def duplicate_percentage(p=0.15):
+            # We decide how many cells will be deleted
+            portion = math.floor(self.NumberOfGenes*p)
+            # Then we indicate a starting index
+            start = random.randint(0, self.NumberOfGenes - portion)
+            copy_indexes = np.arange(portion) + start
+            # Take a insertion index
+            insert = random.randint(0, self.NumberOfGenes)
+            # Repeat the insertion point once per column/row being inserted
+            insert_indices = [insert] * portion
+            # Copy a random gene column
+            donor_col = self.Genome[:, copy_indexes].copy()
+            self.Genome = np.insert(self.Genome, insert_indices, donor_col, axis=1)
+            # Copy its GRN column and row
+            self.GRN = np.insert(self.GRN, insert_indices, self.GRN[:, copy_indexes], axis=1)
+            self.GRN = np.insert(self.GRN, insert_indices, self.GRN[copy_indexes, :], axis=0)
+
+            self.NumberOfGenes += portion
+            self.IsStable = False
+            return True
+
         # We want to make a distribution that shows the probability
         # that a certain mutation occurs. These probabilities
         # are taken from the paper of Cromback and Hogeweg
         distribution = [p_g_dup, p_g_del, p_thres, p_b_dup,
-                        p_b_del, p_innov, p_wei_c, p_per_c]
+                        p_b_del, p_innov, p_wei_c, p_per_c,
+                        del_per, dup_per]
 
         # We make a list of all the possible mutations. NOTE
         # that this MUST have the same order as the distribution
         mutations = [gene_duplication, gene_deletion, threshold_change,
                      binding_duplication, binding_deletion, innovation,
-                     weight_change, performance_change]
+                     weight_change, performance_change, delete_percentage, duplicate_percentage]
 
         # Mutations can occur that delete the last gene of
         # a type. This would mean that the cell dies. Before
@@ -326,7 +374,7 @@ class Cell:
                 # Each mutation returns true if the
                 # cell is still alive after mutation
                 # and false if it died.
-                alive = mutation_function()
+                alive = alive and mutation_function()
 
                 # When the cell has mutated,
                 # the GRN is unstable again.

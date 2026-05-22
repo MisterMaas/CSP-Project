@@ -118,7 +118,7 @@ class Window:
 
         self.model     = None
         self.auto_run  = False
-        self.sim_speed = 5          # steps / second
+        self.sim_speed = 50          # steps / second
         self._auto_acc = 0.0        # ms accumulator
 
         self.min_hist  = []
@@ -141,26 +141,28 @@ class Window:
     def _build_ui(self):
         px, pw = 18, self.PANEL_W - 36
 
-        # FIX #4 (documentation): Death Rate slider stores raw int 1-100;
-        # the callback and _reset both divide by 1000 to get the actual rate,
-        # making the scaling contract explicit in one place.
+        # Re-spaced vertically (y = 25, 80, 135, 190) to leave room for the new slider
         self.sliders = [
-            Slider("Fitness Power", px, 30,  pw, 1,   20,  10,
+            Slider("Fitness Power", px, 25, pw, 1, 20, 10,
                    callback=lambda v: self.model and setattr(self.model, 'FitnessPower', v)),
-            Slider("Death Rate",    px, 100, pw, 1,  100,  10,
-                   fmt=lambda v: f"{v/1000:.3f}",
-                   callback=lambda v: self.model and setattr(self.model, 'DeathRate', v/1000)),
-            Slider("Sim Speed",     px, 170, pw, 1,   30,   5,
+            Slider("Death Rate", px, 80, pw, 1, 500, 100,
+                   fmt=lambda v: f"{v / 1000:.3f}",
+                   callback=lambda v: self.model and setattr(self.model, 'DeathRate', v / 1000)),
+            # NEW: Float slider from 0.0 to 5.0 (Passing floats prevents integer snapping)
+            Slider("Mut. Factor", px, 135, pw, 1.0, 25.0, 1.0,
+                   fmt=lambda v: f"{v:.2f}",
+                   callback=lambda v: self.model and setattr(self.model, 'MutationFactor', v)),
+            Slider("Sim Speed", px, 190, pw, 1, 500, 50,
                    callback=lambda v: setattr(self, 'sim_speed', v)),
         ]
 
-        bh, gap = 34, 8
-        by = 265
+        bh, gap = 34, 6
+        by = 255  # Shifted down slightly to clear the fourth slider cleanly
         self.buttons = [
-            Button("Reset",           px, by,             pw, bh, self._reset,        BTN_GREEN),
-            Button("Step",            px, by+bh+gap,       pw, bh, self._step,         BTN_GREEN),
-            Button("▶  Auto Run",     px, by+2*(bh+gap),   pw, bh, self._toggle_auto,  BTN_GREEN),
-            Button("Switch Target",   px, by+3*(bh+gap),   pw, bh, self._switch,       BTN_BLUE),
+            Button("Reset", px, by, pw, bh, self._reset, BTN_GREEN),
+            Button("Step", px, by + bh + gap, pw, bh, self._step, BTN_GREEN),
+            Button("▶  Auto Run", px, by + 2 * (bh + gap), pw, bh, self._toggle_auto, BTN_GREEN),
+            Button("Switch Target", px, by + 3 * (bh + gap), pw, bh, self._switch, BTN_BLUE),
         ]
         self._auto_btn = self.buttons[2]
 
@@ -168,12 +170,14 @@ class Window:
     # FIX #1: single, unified _reset that is safe to call at any time
     def _reset(self):
         fp = self.sliders[0].value if hasattr(self, 'sliders') else 10
-        # FIX #4: explicit /1000 scaling here, matching the slider callback
         dr = (self.sliders[1].value / 1000) if hasattr(self, 'sliders') else 0.01
-        self.model = Model(death_rate=dr, fitness_power=fp)
+        # NEW: Capture the current value of your new mutation factor slider
+        mf = self.sliders[2].value if hasattr(self, 'sliders') else 1.0
+
+        # Pass it straight to your updated Model instantiation call
+        self.model = Model(death_rate=dr, fitness_power=fp, mutation_factor=mf)
         self.min_hist.clear()
         self.mean_hist.clear()
-        # FIX #5: clear accumulator so no burst of steps on the new model
         self._auto_acc = 0.0
 
     def _step(self):
