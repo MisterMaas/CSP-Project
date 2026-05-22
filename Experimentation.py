@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import os
 from multiprocessing import Pool
-from Model import Model
+from GRNModel import Model
 from numpy.random import random
 import time
 

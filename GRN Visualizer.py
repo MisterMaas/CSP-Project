@@ -131,7 +131,7 @@ def visualize_grn(grn: np.ndarray, title: str = "Gene Regulatory Network",
 
 
 from Cell import Cell
-from Model import Model
+from GRNModel import Model
 
 model = Model()
 cell = Cell(model)

@@ -4,7 +4,7 @@ import numpy.random as random
 from typing import TYPE_CHECKING
 import math
 if TYPE_CHECKING:
-    from Model import Model
+    from GRNModel import Model
 
 class Cell:
     """"

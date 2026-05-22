@@ -1,7 +1,7 @@
 import pygame
 import numpy as np
 import numpy.random as random
-from Model import Model
+from GRNModel import Model
 
 
 """"
