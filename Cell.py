@@ -1,6 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import numpy.random as random
+import random as rnd
 from typing import TYPE_CHECKING
 import math
 if TYPE_CHECKING:
@@ -8,8 +9,12 @@ if TYPE_CHECKING:
 
 class Cell:
     """"
-    Cell dataclass
+    GRN Parameters
     """
+    # Represents how many unique genes
+    # aka. how many gene id's there are.
+    AmountOfTypes : int
+
     # Int that represents the number of different
     # gene types
     NumberOfGenes : int
@@ -43,6 +48,38 @@ class Cell:
     # Element a_ij is 1 when j has an activating effect on i
     # Element a_ij is -1 when j has an inhibiting effect on i
     GRN: np.array
+
+    """"
+    Moving parameters
+    """
+
+    # We keep a boolean that keeps track of wether a
+    # cell is part of a larger organism. We do this
+    # via a boolean. All cells are initially
+    # unicellular
+    UniCellular = True
+
+    # We want to keep track of the initial position of the cell
+    iPos : int
+    jPos : int
+
+
+    # We further want to be able to distinghuish the different
+    # cells
+    ID : int
+
+    """"
+    Devision
+    """
+    # We keep track of the current resource level
+    # this is 10 on initialisation
+    CRL = 10
+
+    # When a cell is in division, it takes some amount of
+    # time. Therefore we have to check how far it
+    # is in the devision process. All cells
+    # are initialized with division steps equal to 0
+    Division_Steps = 0
 
     def __init__(self, model, number_of_genes = 20):
         def InitiateGenome(number_of_genes):
@@ -120,8 +157,9 @@ class Cell:
         self.Model = model
         self.IsStable = False
         self.Fitness = 0
-        self.HammingDistance = 20
+        self.HammingDistance = number_of_genes
         self.NumberOfGenes = number_of_genes
+        self.AmountOfTypes = number_of_genes
         InitiateGenome(number_of_genes)
 
         succes = False
@@ -130,7 +168,7 @@ class Cell:
             succes = InitiateGRN(number_of_genes)
 
     @classmethod
-    def CopyCell(cls, parent):
+    def CopyCell(cls, parent, i_pos, j_pos, id):
         new_cell = cls.__new__(cls)
         new_cell.Model = parent.Model
         new_cell.NumberOfGenes = parent.NumberOfGenes
@@ -140,6 +178,9 @@ class Cell:
         new_cell.Genome = np.copy(parent.Genome)
         new_cell.ExpressionPattern = np.copy(parent.ExpressionPattern)
         new_cell.GRN = np.copy(parent.GRN)
+        new_cell.iPos = i_pos
+        new_cell.jPos = j_pos
+        new_cell.ID = id
         return new_cell
 
     def ExecutePropagation(self, propagation_steps = 11):
@@ -323,7 +364,7 @@ class Cell:
             # genes
             # If there are no duplacates, the cell dies
             unique = np.unique(self.Genome[0])
-            return len(unique) == 20
+            return len(unique) == self.NumberOfGenes
 
         def duplicate_percentage(p=0.15):
             # We decide how many cells will be deleted
@@ -363,6 +404,8 @@ class Cell:
         # a type. This would mean that the cell dies. Before
         # applying the mutation, the cell is alive.
         alive = True
+        # Boolean to track wether mutation has occured
+        mutated = False
 
         for i, mutation_function in enumerate(mutations):
             # We now take a random number and compare it
@@ -379,11 +422,27 @@ class Cell:
                 # When the cell has mutated,
                 # the GRN is unstable again.
                 self.IsStable = False
+                mutated = True
+
+        # If a mutation has occured, the cell get's a new ID:
+        if mutated:
+            self.Model.TypeOffCells += 1
+            self.ID = self.Model.TypeOffCells
+
+        # When the cell is still alive,
+        # we execute propagtion steps.
+        if alive:
+            # if the Propagation might cause the cell
+            # to die
+            alive = self.ExecutePropagation()
 
         # Mutation returns a bolean which
         # states wether the cell is alivbe or dead.
         return alive
 
+    def propose_move(self):
+        di, dj = rnd.choice(self.Model.Directions)
+        return (self.iPos + di) % self.Model.xSize, (self.jPos + dj) % self.Model.ySize
 
 
 

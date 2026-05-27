@@ -1,28 +1,33 @@
-import pygame
+from collections import deque  # <── Added for frame buffering
+import imageio  # <── Added for video/gif saving
 import numpy as np
 import numpy.random as random
-from GRNModel import Model
-
-
-""""
-Simple code to visualize the running of the model
-Made with help from Claude
-"""
+import pygame
+from Model import Model
 
 # ── colours ────────────────────────────────────────────────────────────────
-BG          = (15,  15,  20)
-PANEL_BG    = (22,  22,  30)
-ACCENT      = (0,  210, 180)
-BTN_GREEN   = (30, 160,  90)
-BTN_ORANGE  = (210, 110,  30)
-BTN_BLUE    = (40, 120, 200)
-GRAPH_BG    = (18,  18,  25)
-TEXT        = (210, 220, 230)
-TEXT_DIM    = (110, 120, 135)
-DIVIDER     = (40,  42,  55)
+BG = (15, 15, 20)
+PANEL_BG = (22, 22, 30)
+ACCENT = (0, 210, 180)
+BTN_GREEN = (30, 160, 90)
+BTN_ORANGE = (210, 110, 30)
+BTN_BLUE = (40, 120, 200)
+GRAPH_BG = (18, 18, 25)
+TEXT = (210, 220, 230)
+TEXT_DIM = (110, 120, 135)
+DIVIDER = (40, 42, 55)
 
-# FIX #7: cap history length to prevent unbounded list growth
+# Cap history length to prevent unbounded list growth
 MAX_HIST = 500
+
+
+# ── heatmap colour helper ────────────────────────────────────────────────────
+def resource_to_color(value: float, max_val: float) -> tuple:
+    """Map a resource value seamlessly from black (0) to bright green (max)."""
+    if max_val <= 0 or value <= 0:
+        return (0, 0, 0)
+    t = min(1.0, value / max_val)
+    return (0, int(t * 255), 0)
 
 
 # ── tiny UI widgets ─────────────────────────────────────────────────────────
@@ -30,11 +35,11 @@ class Slider:
     H = 6
 
     def __init__(self, label, x, y, w, lo, hi, init, fmt=str, callback=None):
-        self.label    = label
-        self.track    = pygame.Rect(x, y + 18, w, self.H)
+        self.label = label
+        self.track = pygame.Rect(x, y + 18, w, self.H)
         self.lo, self.hi = lo, hi
-        self.value    = init
-        self.fmt      = fmt
+        self.value = init
+        self.fmt = fmt
         self.callback = callback
         self.dragging = False
 
@@ -44,27 +49,23 @@ class Slider:
         return int(self.track.x + t * self.track.w)
 
     def draw(self, surf, font):
-        # FIX #2: compute handle x once, no walrus operator needed
         hx = self._handle_x
-        # track
         pygame.draw.rect(surf, (50, 52, 65), self.track, border_radius=3)
-        # filled portion
-        filled = pygame.Rect(self.track.x, self.track.y,
-                             hx - self.track.x, self.H)
+        filled = pygame.Rect(self.track.x, self.track.y, hx - self.track.x, self.H)
         pygame.draw.rect(surf, ACCENT, filled, border_radius=3)
-        # handle
         pygame.draw.circle(surf, (230, 235, 245), (hx, self.track.centery), 8)
-        pygame.draw.circle(surf, ACCENT,           (hx, self.track.centery), 5)
-        # label
-        surf.blit(font.render(f"{self.label}:  {self.fmt(self.value)}",
-                              True, TEXT), (self.track.x, self.track.y - 18))
+        pygame.draw.circle(surf, ACCENT, (hx, self.track.centery), 5)
+        surf.blit(
+            font.render(f"{self.label}:  {self.fmt(self.value)}", True, TEXT),
+            (self.track.x, self.track.y - 18),
+        )
 
     def handle(self, event, offset):
         """offset = (panel_screen_x, panel_screen_y)"""
         hx = self._handle_x + offset[0]
         hy = self.track.centery + offset[1]
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if abs(event.pos[0]-hx) < 12 and abs(event.pos[1]-hy) < 12:
+            if abs(event.pos[0] - hx) < 12 and abs(event.pos[1] - hy) < 12:
                 self.dragging = True
         elif event.type == pygame.MOUSEBUTTONUP:
             self.dragging = False
@@ -72,22 +73,27 @@ class Slider:
             t = (event.pos[0] - offset[0] - self.track.x) / self.track.w
             self.value = self.lo + t * (self.hi - self.lo)
             self.value = max(self.lo, min(self.hi, self.value))
-            if isinstance(self.lo, int):
+            if isinstance(self.lo, int) and isinstance(self.hi, int):
                 self.value = int(round(self.value))
             if self.callback:
                 self.callback(self.value)
 
 
 class Button:
+
     def __init__(self, label, x, y, w, h, callback, color=BTN_GREEN):
-        self.label    = label
-        self.rect     = pygame.Rect(x, y, w, h)
-        self.color    = color
+        self.label = label
+        self.rect = pygame.Rect(x, y, w, h)
+        self.color = color
         self.callback = callback
-        self._hover   = False
+        self._hover = False
 
     def draw(self, surf, font):
-        col = tuple(min(255, c + 25) for c in self.color) if self._hover else self.color
+        col = (
+            tuple(min(255, c + 25) for c in self.color)
+            if self._hover
+            else self.color
+        )
         pygame.draw.rect(surf, col, self.rect, border_radius=5)
         t = font.render(self.label, True, (255, 255, 255))
         surf.blit(t, t.get_rect(center=self.rect.center))
@@ -102,83 +108,189 @@ class Button:
 
 # ── main window ─────────────────────────────────────────────────────────────
 class Window:
-    PANEL_W   = 240
-    GRAPH_H   = 180       # pixels reserved at the bottom for the graph
-    FPS       = 60
+    PANEL_W = 240
+    GRAPH_H = 180
+    FPS = 60
 
-    def __init__(self, win_w=1100, win_h=680):
+    def __init__(self, win_w=1100, win_h=820):
         pygame.init()
-        self.screen  = pygame.display.set_mode((win_w, win_h))
+        self.screen = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         pygame.display.set_caption("Evolution of Evolvable GRN")
-        self.clock   = pygame.time.Clock()
+        self.clock = pygame.time.Clock()
 
         self.W, self.H = win_w, win_h
-        self.grid_w  = win_w - self.PANEL_W
-        self.grid_h  = win_h - self.GRAPH_H
 
-        self.model     = None
-        self.auto_run  = False
-        self.sim_speed = 50          # steps / second
-        self._auto_acc = 0.0        # ms accumulator
+        self.model = None
+        self.auto_run = False
+        self.sim_speed = 50
+        self._auto_acc = 0.0
 
-        self.min_hist  = []
+        self.min_hist = []
         self.mean_hist = []
 
-        self.font   = pygame.font.SysFont("consolas", 13)
+        self.font = pygame.font.SysFont("consolas", 13)
         self.font_b = pygame.font.SysFont("consolas", 13, bold=True)
 
-        # pre-allocated surfaces
-        self._grid_surf  = pygame.Surface((self.grid_w, self.grid_h))
+        self.id_colors = {}
+
+        # Rolling buffer for video capture (captures last 100 rendered frames)
+        self.frame_buffer = deque(maxlen=100)
+
+        self._build_ui()
+        self._reset()
+        self._update_dimensions(win_w, win_h)
+
+    def _update_dimensions(self, w, h):
+        self.W, self.H = w, h
+        self.grid_w = w - self.PANEL_W
+        self.grid_h = h - self.GRAPH_H
+
+        self._grid_surf = pygame.Surface((self.grid_w, self.grid_h))
         self._graph_surf = pygame.Surface((self.grid_w, self.GRAPH_H))
         self._panel_surf = pygame.Surface((self.PANEL_W, self.H))
 
         self._build_ui()
-        # FIX #1: __init__ calls _reset once; _build_ui must run first so
-        # sliders exist, but the model is None at that point — _reset handles it.
-        self._reset()
 
     # ── UI layout ────────────────────────────────────────────────────────────
     def _build_ui(self):
         px, pw = 18, self.PANEL_W - 36
 
-        # Re-spaced vertically (y = 25, 80, 135, 190) to leave room for the new slider
         self.sliders = [
-            Slider("Fitness Power", px, 25, pw, 1, 20, 10,
-                   callback=lambda v: self.model and setattr(self.model, 'FitnessPower', v)),
-            Slider("Death Rate", px, 80, pw, 1, 500, 100,
-                   fmt=lambda v: f"{v / 1000:.3f}",
-                   callback=lambda v: self.model and setattr(self.model, 'DeathRate', v / 1000)),
-            # NEW: Float slider from 0.0 to 5.0 (Passing floats prevents integer snapping)
-            Slider("Mut. Factor", px, 135, pw, 1.0, 25.0, 1.0,
-                   fmt=lambda v: f"{v:.2f}",
-                   callback=lambda v: self.model and setattr(self.model, 'MutationFactor', v)),
-            Slider("Sim Speed", px, 190, pw, 1, 500, 50,
-                   callback=lambda v: setattr(self, 'sim_speed', v)),
+            Slider(
+                "Fitness Power",
+                px,
+                25,
+                pw,
+                1,
+                20,
+                10,
+                callback=lambda v: self.model
+                and setattr(self.model, "FitnessPower", v),
+            ),
+            Slider(
+                "Mut. Factor",
+                px,
+                80,
+                pw,
+                1.0,
+                25.0,
+                1.0,
+                fmt=lambda v: f"{v:.1f}",
+                callback=lambda v: self.model
+                and setattr(self.model, "MutationFactor", v),
+            ),
+            Slider(
+                "Mean Resource", px, 135, pw, 0, 10, 1, fmt=lambda v: f"{v:.1f}"
+            ),
+            Slider(
+                "SD Resource", px, 190, pw, 0.0, 5.0, 2.5, fmt=lambda v: f"{v:.1f}"
+            ),
+            Slider(
+                "Regen Rate",
+                px,
+                245,
+                pw,
+                0.0,
+                0.1,
+                0.01,
+                fmt=lambda v: f"{v:.3f}",
+                callback=lambda v: self.model
+                and setattr(self.model, "RegenRate", v),
+            ),
+            Slider(
+                "Sim Speed",
+                px,
+                300,
+                pw,
+                1,
+                500,
+                50,
+                callback=lambda v: setattr(self, "sim_speed", v),
+            ),
+            Slider(
+                "Div. Threshold",
+                px,
+                355,
+                pw,
+                5,
+                50,
+                15,
+                callback=lambda v: self.model
+                and setattr(self.model, "DivisionThreshold", v),
+            ),
+            Slider(
+                "Div. Timesteps",
+                px,
+                410,
+                pw,
+                1,
+                30,
+                5,
+                callback=lambda v: self.model
+                and setattr(self.model, "DivisionTimeSteps", v),
+            ),
         ]
 
         bh, gap = 34, 6
-        by = 255  # Shifted down slightly to clear the fourth slider cleanly
+        by = 470
         self.buttons = [
             Button("Reset", px, by, pw, bh, self._reset, BTN_GREEN),
-            Button("Step", px, by + bh + gap, pw, bh, self._step, BTN_GREEN),
-            Button("▶  Auto Run", px, by + 2 * (bh + gap), pw, bh, self._toggle_auto, BTN_GREEN),
-            Button("Switch Target", px, by + 3 * (bh + gap), pw, bh, self._switch, BTN_BLUE),
+            Button("Step", px, by + (bh + gap), pw, bh, self._step, BTN_GREEN),
+            Button(
+                "▶  Auto Run",
+                px,
+                by + 2 * (bh + gap),
+                pw,
+                bh,
+                self._toggle_auto,
+                BTN_GREEN,
+            ),
+            Button(
+                "Switch Target",
+                px,
+                by + 3 * (bh + gap),
+                pw,
+                bh,
+                self._switch,
+                BTN_BLUE,
+            ),
+            # New Action Button for capturing the recorded frames
+            Button(
+                "🎬 Save Video",
+                px,
+                by + 4 * (bh + gap),
+                pw,
+                bh,
+                self._save_video,
+                BTN_BLUE,
+            ),
         ]
         self._auto_btn = self.buttons[2]
 
     # ── model actions ────────────────────────────────────────────────────────
-    # FIX #1: single, unified _reset that is safe to call at any time
     def _reset(self):
-        fp = self.sliders[0].value if hasattr(self, 'sliders') else 10
-        dr = (self.sliders[1].value / 1000) if hasattr(self, 'sliders') else 0.01
-        # NEW: Capture the current value of your new mutation factor slider
-        mf = self.sliders[2].value if hasattr(self, 'sliders') else 1.0
+        fp = self.sliders[0].value if hasattr(self, "sliders") else 10
+        mf = self.sliders[1].value if hasattr(self, "sliders") else 1.0
+        mr = self.sliders[2].value if hasattr(self, "sliders") else 5.0
+        sdr = self.sliders[3].value if hasattr(self, "sliders") else 3.0
+        rr = self.sliders[4].value if hasattr(self, "sliders") else 0.05
+        d_th = self.sliders[6].value if hasattr(self, "sliders") else 15
+        d_ts = self.sliders[7].value if hasattr(self, "sliders") else 5
 
-        # Pass it straight to your updated Model instantiation call
-        self.model = Model(death_rate=dr, fitness_power=fp, mutation_factor=mf)
+        self.model = Model(
+            fitness_power=fp,
+            mutation_factor=mf,
+            mean_resource=mr,
+            sd_recourse=sdr,
+            regen_rate=rr,
+            division_thres=d_th,
+            division_timesteps=d_ts,
+        )
         self.min_hist.clear()
         self.mean_hist.clear()
         self._auto_acc = 0.0
+        self.id_colors.clear()
+        self.frame_buffer.clear()
 
     def _step(self):
         if self.model is None:
@@ -186,9 +298,8 @@ class Window:
         self.model.ExecuteStep()
         self.min_hist.append(self.model.MinimalDistance)
         self.mean_hist.append(self.model.MeanDistance)
-        # FIX #7: cap history so graph line-drawing stays O(MAX_HIST)
         if len(self.min_hist) > MAX_HIST:
-            self.min_hist  = self.min_hist[-MAX_HIST:]
+            self.min_hist = self.min_hist[-MAX_HIST:]
             self.mean_hist = self.mean_hist[-MAX_HIST:]
 
     def _toggle_auto(self):
@@ -204,50 +315,154 @@ class Window:
         if self.model:
             self.model.SwitchTarget()
 
-    # ── fast grid render via surfarray ───────────────────────────────────────
+    def _save_video(self):
+        """Export buffered frames to a GIF."""
+        if not self.frame_buffer:
+            print("No frames captured yet!")
+            return
+
+        print(f"Exporting {len(self.frame_buffer)} frames...")
+
+        # Change extension to .gif
+        output_filename = "simulation_history.gif"
+
+        try:
+            # Note: lower the fps slightly (e.g., 15-20) for GIFs so they don't play at hyperspeed
+            imageio.mimsave(output_filename, list(self.frame_buffer), fps=20)
+            print(f"Successfully saved GIF to {output_filename}")
+        except Exception as e:
+            print(f"Failed to save GIF: {e}")
+
+    def _get_color_for_id(self, cell_id):
+        """Pick a completely unique, random gradient shade of strictly Red or Blue based on cell ID."""
+        if cell_id not in self.id_colors:
+            # Seed state based on ID so color choices remain consistent per cell
+            rng = np.random.default_rng(int(cell_id))
+
+            # 50% chance to be red gradient, 50% chance blue gradient
+            if rng.random() < 0.5:
+                # Continuous Red gradient: Rich Crimson to Bright Rose/Pink-ish accents
+                r = rng.integers(130, 256)  # 130 to 255
+                g = 0
+                b = rng.integers(0, 141)  # 0 to 140
+            else:
+                # Continuous Blue gradient: Midnight Slate to Vivid Electric Blue
+                r = rng.integers(0, 121)  # 0 to 120
+                g = 0
+                b = rng.integers(130, 256)  # 130 to 255
+
+            self.id_colors[cell_id] = (int(r), int(g), int(b))
+        return self.id_colors[cell_id]
+
+    # ── grid render: heatmap + cell overlay ─────────────────────────────────
     def _render_grid(self):
         surf = self._grid_surf
         surf.fill(BG)
 
         if self.model is None or self.model.Grid is None:
             msg = self.font.render("No model loaded", True, TEXT_DIM)
-            surf.blit(msg, msg.get_rect(center=(self.grid_w // 2, self.grid_h // 2)))
+            surf.blit(
+                msg, msg.get_rect(center=(self.grid_w // 2, self.grid_h // 2))
+            )
             return surf
 
         xs, ys = self.model.xSize, self.model.ySize
-        sw, sh = self.grid_w, self.grid_h
 
-        # FIX #3: three states — dead (-1), stable alive (fitness)
-        fitness  = np.full((xs, ys), -1.0, dtype=np.float32)
+        cell_w = self.grid_w // xs
+        cell_h = self.grid_h // ys
+        cell_size = max(2, min(cell_w, cell_h))
 
-        # FIX #6: still requires a Python loop over object array; mitigate by
-        # keeping the body as lean as possible (no attribute chaining).
-        grid = self.model.Grid
+        offset_x = (self.grid_w - xs * cell_size) // 2
+        offset_y = (self.grid_h - ys * cell_size) // 2
+
+        # ── 1. Draw resource heatmap ─────────────────────────────────────────
+        resource_grid = self.model.Grid
+        max_val = (
+            float(np.max(resource_grid)) if resource_grid.size > 0 else 1.0
+        )
+
         for i in range(xs):
             for j in range(ys):
-                c = grid[i, j]
-                if c is None:
-                    continue
-                if c.IsStable:
-                    fitness[i, j] = float(c.Fitness)
+                color = resource_to_color(resource_grid[i, j], max_val)
+                rect = pygame.Rect(
+                    offset_x + i * cell_size,
+                    offset_y + j * cell_size,
+                    cell_size,
+                    cell_size,
+                )
+                pygame.draw.rect(surf, color, rect)
 
-        # Map fitness -> RGB
-        stable_mask   = fitness >= 0
-        f             = np.clip(fitness, 0, 1)
-        r = np.where(stable_mask,  ((1 - f) * 255).astype(np.uint8), 0)
-        g = np.where(stable_mask,  (f        * 255).astype(np.uint8), 0)
-        b = np.zeros_like(r)
+        # ── 2. Overlay cells from Model.Cells ────────────────────────────────
+        max_genes = getattr(self.model, "NumberOfGenes", 20)
 
+        # Thicker border dynamic calculation based on current pixel cell scale
+        border_thickness = max(1, min(4, cell_size // 4))
 
-        rgb = np.stack([r, g, b], axis=2)   # (xs, ys, 3)
+        for cell in self.model.Cells:
+            i, j = cell.iPos, cell.jPos
+            rect = pygame.Rect(
+                offset_x + i * cell_size,
+                offset_y + j * cell_size,
+                cell_size,
+                cell_size,
+            )
 
-        # FIX #10: use pygame.transform.scale to fill the area exactly
-        cell_px = max(1, min(sw // xs, sh // ys))
-        scaled  = np.repeat(np.repeat(rgb, cell_px, axis=0), cell_px, axis=1)
-        small   = pygame.surfarray.make_surface(scaled)
-        # Scale to fill grid area precisely, eliminating edge clipping
-        pygame.transform.scale(small, (sw, sh), surf)
+            # Border colour scale based on Hamming distance: Clear Orange (0) -> Gray Orange (max)
+            dist = getattr(cell, "HammingDistance", 0)
+            dist_ratio = np.clip(float(dist) / max_genes, 0.0, 1.0)
+
+            # Define our two target colors:
+            # Clear, vibrant orange
+            clear_orange = (255, 120, 10)
+            # Muted, desaturated gray-orange (bringing channels closer together)
+            gray_orange = (110, 90, 75)
+
+            # Linearly interpolate (blend) between clear_orange and gray_orange based on dist_ratio
+            r = int(
+                clear_orange[0] + dist_ratio * (gray_orange[0] - clear_orange[0])
+            )
+            g = int(
+                clear_orange[1] + dist_ratio * (gray_orange[1] - clear_orange[1])
+            )
+            b = int(
+                clear_orange[2] + dist_ratio * (gray_orange[2] - clear_orange[2])
+            )
+
+            border_color = (r, g, b)
+
+            if cell.IsStable:
+                body_color = self._get_color_for_id(cell.ID)
+                pygame.draw.rect(surf, body_color, rect)
+                pygame.draw.rect(surf, border_color, rect, border_thickness)
+            else:
+                # Unstable: draw a dimmed version of the cell's own color
+                r, g, b = self._get_color_for_id(cell.ID)
+                dim_color = (r // 3, g // 3, b // 3)
+                pygame.draw.rect(surf, dim_color, rect)
+                pygame.draw.rect(surf, (140, 40, 40), rect, border_thickness)
+
+        # ── 3. Heatmap legend (bottom-left corner of grid area) ──────────────
+        self._draw_heatmap_legend(
+            surf, offset_x, offset_y + ys * cell_size, max_val
+        )
+
         return surf
+
+    def _draw_heatmap_legend(self, surf, x, y, max_val):
+        """Small horizontal gradient bar labelled 0 … max_val."""
+        bar_w, bar_h = 120, 8
+        lx, ly = x + 4, y - bar_h - 18
+        if ly < 0:
+            return
+        for px in range(bar_w):
+            color = resource_to_color(px / bar_w * max_val, max_val)
+            pygame.draw.line(surf, color, (lx + px, ly), (lx + px, ly + bar_h))
+        pygame.draw.rect(surf, DIVIDER, (lx, ly, bar_w, bar_h), 1)
+        surf.blit(self.font.render("0", True, TEXT_DIM), (lx, ly + bar_h + 2))
+        label = self.font.render(f"{max_val:.0f}", True, TEXT_DIM)
+        surf.blit(label, (lx + bar_w - label.get_width(), ly + bar_h + 2))
+        mid = self.font.render("Resource", True, TEXT_DIM)
+        surf.blit(mid, (lx + bar_w // 2 - mid.get_width() // 2, ly - 13))
 
     # ── graph ────────────────────────────────────────────────────────────────
     def _render_graph(self):
@@ -255,48 +470,61 @@ class Window:
         surf.fill(GRAPH_BG)
 
         pad = 36
-        gw  = self.grid_w - 2 * pad
-        gh  = self.GRAPH_H - 2 * pad
+        gw = self.grid_w - 2 * pad
+        gh = self.GRAPH_H - 2 * pad
         max_val = 20
 
-        # axes
-        pygame.draw.line(surf, DIVIDER, (pad, pad),    (pad,    pad+gh))
-        pygame.draw.line(surf, DIVIDER, (pad, pad+gh), (pad+gw, pad+gh))
+        pygame.draw.line(surf, DIVIDER, (pad, pad), (pad, pad + gh))
+        pygame.draw.line(surf, DIVIDER, (pad, pad + gh), (pad + gw, pad + gh))
 
-        # y ticks
         for v in range(0, 21, 5):
             y = pad + gh - int(v / max_val * gh)
-            pygame.draw.line(surf, DIVIDER, (pad-4, y), (pad+gw, y))
-            surf.blit(self.font.render(str(v), True, TEXT_DIM), (2, y-7))
+            pygame.draw.line(surf, DIVIDER, (pad - 4, y), (pad + gw, y))
+            surf.blit(self.font.render(str(v), True, TEXT_DIM), (2, y - 7))
 
         n = len(self.min_hist)
         if n < 2:
-            surf.blit(self.font.render("Waiting for data…", True, TEXT_DIM),
-                      (pad+8, pad + gh//2))
+            surf.blit(
+                self.font.render("Waiting for data…", True, TEXT_DIM),
+                (pad + 8, pad + gh // 2),
+            )
             return surf
 
         def px(i, v):
-            x = pad + int(i / (n-1) * gw)
+            x = pad + int(i / (n - 1) * gw)
             y = pad + gh - int(v / max_val * gh)
             return x, y
 
-        # draw lines
-        for i in range(n-1):
-            pygame.draw.line(surf, (0, 210, 220),
-                             px(i, self.min_hist[i]),  px(i+1, self.min_hist[i+1]),  2)
-            pygame.draw.line(surf, (255, 160, 40),
-                             px(i, self.mean_hist[i]), px(i+1, self.mean_hist[i+1]), 2)
+        for i in range(n - 1):
+            pygame.draw.line(
+                surf,
+                (0, 210, 220),
+                px(i, self.min_hist[i]),
+                px(i + 1, self.min_hist[i + 1]),
+                2,
+            )
+            pygame.draw.line(
+                surf,
+                (255, 160, 40),
+                px(i, self.mean_hist[i]),
+                px(i + 1, self.mean_hist[i + 1]),
+                2,
+            )
 
-        # legend
-        pygame.draw.line(surf, (0,210,220),   (pad, 8), (pad+20, 8), 2)
-        surf.blit(self.font.render("min dist",  True, (0,210,220)),   (pad+24, 1))
-        pygame.draw.line(surf, (255,160,40),  (pad+90, 8), (pad+110, 8), 2)
-        surf.blit(self.font.render("mean dist", True, (255,160,40)), (pad+114, 1))
+        pygame.draw.line(surf, (0, 210, 220), (pad, 8), (pad + 20, 8), 2)
+        surf.blit(
+            self.font.render("min dist", True, (0, 210, 220)), (pad + 24, 1)
+        )
+        pygame.draw.line(surf, (255, 160, 40), (pad + 90, 8), (pad + 110, 8), 2)
+        surf.blit(
+            self.font.render("mean dist", True, (255, 160, 40)), (pad + 114, 1)
+        )
 
-        # FIX #7: show how many steps are displayed if history was capped
         if len(self.min_hist) == MAX_HIST:
-            surf.blit(self.font.render(f"(last {MAX_HIST} steps)", True, TEXT_DIM),
-                      (pad+200, 1))
+            surf.blit(
+                self.font.render(f"(last {MAX_HIST} steps)", True, TEXT_DIM),
+                (pad + 200, 1),
+            )
 
         return surf
 
@@ -305,49 +533,67 @@ class Window:
         surf = self._panel_surf
         surf.fill(PANEL_BG)
 
-        # header
         hdr = self.font_b.render("GRN  EVOLUTION", True, ACCENT)
-        surf.blit(hdr, hdr.get_rect(centerx=self.PANEL_W//2, y=8))
-        pygame.draw.line(surf, ACCENT, (12, 26), (self.PANEL_W-12, 26))
+        surf.blit(hdr, hdr.get_rect(centerx=self.PANEL_W // 2, y=8))
+        pygame.draw.line(surf, ACCENT, (12, 26), (self.PANEL_W - 12, 26))
 
         for s in self.sliders:
             s.draw(surf, self.font)
         for b in self.buttons:
             b.draw(surf, self.font)
 
-        # stats block
-        sy = 460
-        pygame.draw.line(surf, DIVIDER, (12, sy-8), (self.PANEL_W-12, sy-8))
+        sy = 650
+        pygame.draw.line(
+            surf, DIVIDER, (12, sy - 8), (self.PANEL_W - 12, sy - 8)
+        )
 
-        # FIX #9: explicit "no model" message when model is None
         if self.model is None:
-            surf.blit(self.font.render("No model loaded", True, TEXT_DIM), (18, sy))
+            surf.blit(
+                self.font.render("No model loaded", True, TEXT_DIM), (18, sy)
+            )
         else:
             stats = [
-                ("Timestep",   getattr(self.model, 'Timestep', 0)),
-                ("Population", getattr(self.model, 'TotalPopulation', '—')),
-                ("Min dist",   getattr(self.model, 'MinimalDistance', '—')),
-                ("Mean dist",  f"{getattr(self.model,'MeanDistance',0):.2f}"),
-                ("Target",     "A" if np.array_equal(
-                                   getattr(self.model,'Target', None),
-                                   getattr(self.model,'TargetA', None)) else "B"),
+                ("Timestep", getattr(self.model, "Timestep", 0)),
+                ("Population", getattr(self.model, "TotalPopulation", "—")),
+                ("Min dist", getattr(self.model, "MinimalDistance", "—")),
+                (
+                    "Mean dist",
+                    f"{getattr(self.model, 'MeanDistance', 0):.2f}",
+                ),
+                (
+                    "Target",
+                    (
+                        "A"
+                        if np.array_equal(
+                            getattr(self.model, "Target", None),
+                            getattr(self.model, "TargetA", None),
+                        )
+                        else "B"
+                    ),
+                ),
             ]
             for label, val in stats:
-                surf.blit(self.font.render(f"{label:<12} {val}", True, TEXT), (18, sy))
+                surf.blit(
+                    self.font.render(f"{label:<12} {val}", True, TEXT),
+                    (18, sy),
+                )
                 sy += 20
+
         return surf
 
     # ── main loop ────────────────────────────────────────────────────────────
     def run(self):
-        panel_origin = (self.grid_w, 0)
-
         while True:
+            panel_origin = (self.grid_w, 0)
             dt = self.clock.tick(self.FPS)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     return
+                elif event.type == pygame.VIDEORESIZE:
+                    self._update_dimensions(event.w, event.h)
+
                 for s in self.sliders:
                     s.handle(event, panel_origin)
                 for b in self.buttons:
@@ -356,24 +602,36 @@ class Window:
             if self.auto_run and self.model:
                 self._auto_acc += dt
                 interval = 1000 / max(1, self.sim_speed)
-                # FIX #8: clamp accumulator to one interval to prevent step bursts
-                # (e.g. after a speed increase or window focus regain)
                 self._auto_acc = min(self._auto_acc, interval * 2)
                 while self._auto_acc >= interval:
                     self._step()
                     self._auto_acc -= interval
 
-            # draw
             self.screen.fill(BG)
-            self.screen.blit(self._render_grid(),  (0, 0))
+            self.screen.blit(self._render_grid(), (0, 0))
             self.screen.blit(self._render_graph(), (0, self.grid_h))
             self.screen.blit(self._render_panel(), panel_origin)
 
-            # dividers
-            pygame.draw.line(self.screen, DIVIDER,
-                             (0, self.grid_h), (self.grid_w, self.grid_h))
-            pygame.draw.line(self.screen, DIVIDER,
-                             (self.grid_w, 0), (self.grid_w, self.H))
+            pygame.draw.line(
+                self.screen,
+                DIVIDER,
+                (0, self.grid_h),
+                (self.grid_w, self.grid_h),
+            )
+            pygame.draw.line(
+                self.screen,
+                DIVIDER,
+                (self.grid_w, 0),
+                (self.grid_w, self.H),
+            )
+
+            # ── Capture current window display frame into buffer ─────────────
+            # Captures an RGB string buffer and shifts it to a numpy pixel array
+            frame_str = pygame.image.tostring(self.screen, "RGB")
+            frame_np = np.frombuffer(frame_str, dtype=np.uint8).reshape(
+                self.H, self.W, 3
+            )
+            self.frame_buffer.append(frame_np)
 
             pygame.display.flip()
 

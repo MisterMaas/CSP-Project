@@ -64,7 +64,7 @@ class Model:
 
         def InitializePopulation(parent: Cell):
             # We create the numpy array that represents the grid
-            self.Grid = np.empty((self.xSize, self.ySize), dtype=object)
+            self.Grid = np.full((self.xSize, self.ySize), None, dtype=object)
             # We go over all indexces of the grid
             total = 0
             populated = 0

@@ -20,7 +20,6 @@ def plot_run(filename: str, ax=None, title: str = None):
         lines = f.readlines()
 
     i = 0
-    i = 0
     while i < len(lines):
         line = lines[i].strip()
         if not line:
