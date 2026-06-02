@@ -440,8 +440,8 @@ class Cell:
         # states wether the cell is alivbe or dead.
         return alive
 
-    def propose_move(self):
-        di, dj = rnd.choice(self.Model.Directions)
+    def propose_move(self, directions):
+        di, dj = directions
         return (self.iPos + di) % self.Model.xSize, (self.jPos + dj) % self.Model.ySize
 
 
