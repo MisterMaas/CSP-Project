@@ -270,13 +270,13 @@ class Window:
         if cell_id not in self.id_colors:
             rng = np.random.default_rng(int(cell_id))
             if rng.random() < 0.5:
-                r = rng.integers(130, 256)
-                g = 0
-                b = rng.integers(0, 141)
+                r = rng.integers(200, 256)
+                g = rng.integers(180, 220)
+                b = 0
             else:
-                r = rng.integers(0, 121)
-                g = 0
-                b = rng.integers(130, 256)
+                r = rng.integers(220, 256)
+                g = rng.integers(120, 160)
+                b = 0
             self.id_colors[cell_id] = (int(r), int(g), int(b))
         return self.id_colors[cell_id]
 

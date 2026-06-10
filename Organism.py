@@ -126,7 +126,7 @@ class Organism:
     #     # not sure if we want to add this
     #
     #     # After the cells are divided, it is also possible for
-    #     # the organism to devide. This is simply done by
+    #     # the organism to divide. This is simply done by
     #     # "Cutting it in half". We want the probability of this
     #     # happening to increase depending on the size of the
     #     # organism
