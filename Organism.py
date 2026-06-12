@@ -4,6 +4,9 @@ import math
 from typing import TYPE_CHECKING
 import numpy as np
 import numpy.random as random
+
+from Cell import Cell
+
 if TYPE_CHECKING:
     from Model import Model
 
@@ -101,7 +104,7 @@ class Organism:
                         # or can become it's own organism depending on the fitness
                         if random.random() > cell.Fitness:
                             org = Organism(self.Model, new_cell, (di, dj))
-                            self.Model.Organisms.append(org)
+                            self.Model.Organisms.add(org)
                             self.Model.Occupied[(di, dj)] = org
                         else:
                             # Otherwise the cell will stick to the organism
@@ -109,8 +112,10 @@ class Organism:
                             self.Positions.append((di, dj))
                             self.CellAmount += 1
                             self.Model.Occupied[(di, dj)] = self
+                            cell.UniCellular = False
+                            new_cell.UniCellular = False
 
-                        self.Model.Cells.append(new_cell)
+                        self.Model.Cells.add(new_cell)
                         placed = True
                         break
 
@@ -245,12 +250,16 @@ class Organism:
                 # Delete the single celled organism
                 self.Model.Occupied.pop(last_pos, None)
                 self.Model.Organisms.remove(self)
+                cell.UniCellular = False
 
                 cell.iPos, cell.jPos = last_pos
 
                 # Cell gets absorbed by neighbor
                 collided_organism.Cells.append(cell)
                 collided_organism.Positions.append(last_pos)
+
+                if collided_organism.CellAmount == 1:
+                    collided_organism.Cells[0].UniCellular = False
                 collided_organism.CellAmount += 1
 
                 # Update the grid

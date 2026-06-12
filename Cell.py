@@ -18,7 +18,7 @@ class Cell:
     # gene types
     NumberOfGenes : int
 
-    # Boolean that keeps track of wether a cell is
+    # Boolean that keeps track of weather a cell is
     # stable. This is added for optimalisation
     IsStable : bool
 

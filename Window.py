@@ -3,6 +3,8 @@ import imageio  # <── Added for video/gif saving
 import numpy as np
 import numpy.random as random
 import pygame
+
+from Cell import Cell
 from Model import Model
 import math
 
@@ -266,19 +268,27 @@ class Window:
         except Exception as e:
             print(f"Failed to save GIF: {e}")
 
-    def _get_color_for_id(self, cell_id):
-        if cell_id not in self.id_colors:
-            rng = np.random.default_rng(int(cell_id))
-            if rng.random() < 0.5:
-                r = rng.integers(200, 256)
-                g = rng.integers(180, 220)
-                b = 0
-            else:
-                r = rng.integers(220, 256)
-                g = rng.integers(120, 160)
-                b = 0
-            self.id_colors[cell_id] = (int(r), int(g), int(b))
+    def _get_color_for_id(self, cell):
+        cell_id = cell.ID
+        if cell.UniCellular:
+            self.id_colors[cell_id] = (255, 200, 0)
+        else:
+            self.id_colors[cell_id] = (0, 0, 255)
+
         return self.id_colors[cell_id]
+
+
+            #rng = np.random.default_rng(int(cell_id))
+            # if rng.random() < 0.5:
+            #     r = rng.integers(200, 256)
+            #     g = rng.integers(180, 220)
+            #     b = 0
+            # else:
+            #     r = rng.integers(220, 256)
+            #     g = rng.integers(120, 160)
+            #     b = 0
+            # self.id_colors[cell_id] = (int(r), int(g), int(b))
+        # return self.id_colors[cell_id]
 
     def _render_grid(self):
         surf = self._grid_surf
@@ -325,11 +335,11 @@ class Window:
             border_color = (r, g, b)
 
             if cell.IsStable:
-                body_color = self._get_color_for_id(cell.ID)
+                body_color = self._get_color_for_id(cell)
                 pygame.draw.rect(surf, body_color, rect)
                 pygame.draw.rect(surf, border_color, rect, border_thickness)
             else:
-                r, g, b = self._get_color_for_id(cell.ID)
+                r, g, b = self._get_color_for_id(cell)
                 dim_color = (r // 3, g // 3, b // 3)
                 pygame.draw.rect(surf, dim_color, rect)
                 pygame.draw.rect(surf, (140, 40, 40), rect, border_thickness)
