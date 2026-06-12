@@ -3,7 +3,6 @@ from dis import Positions
 import numpy.random as random
 import numpy as np
 from FyeldGenerator import generate_field
-import math
 from Cell import Cell
 from Organism import Organism
 
@@ -21,9 +20,9 @@ class Model:
 
     # We keep track off all the cells that are
     # alive in the gird
-    Cells = []
+    Cells : set
     Occupied = {}
-    Organisms = []
+    Organisms : set
     RegenaRate : float
     DivisionThreshold : int
     DivisionTimeSteps : int
@@ -79,7 +78,7 @@ class Model:
             print(f"Target A: {self.TargetA}")
             # Generate target B, retrying until hamming distance from A is at least 7
             hamming_A_to_B = 0
-            while hamming_A_to_B < 7 and not self.TargetB.any():
+            while hamming_A_to_B < 7 or not self.TargetB.any():
                 b_number = random.randint(5, 21)
                 b_indices = random.choice(self.NumberOfGenes, size=b_number, replace=False)
                 self.TargetB= flip_expression(b_indices, expression_pattern)
@@ -126,8 +125,6 @@ class Model:
             print(self.Grid)
 
         def InitializePopulation(parent: Cell):
-            # We create the numpy array that represents the cells
-            self.Cells = []
             # We go over all indexces of the grid
             self.TypeOffCells = 0
             for i in range(self.xSize):
@@ -138,9 +135,9 @@ class Model:
                         cell = Cell.CopyCell(parent, i, j, self.TypeOffCells)
                         cell.CRL = 10
                         self.TypeOffCells += 1
-                        self.Cells.append(cell)
+                        self.Cells.add(cell)
                         org = Organism(self, cell, (i, j))
-                        self.Organisms.append(org)
+                        self.Organisms.add(org)
                         self.Occupied[(i, j)] = org
 
 
@@ -155,8 +152,8 @@ class Model:
         self.xSize = x_size
         self.ySize = y_size
 
-        self.Cells = []
-        self.Organisms = []
+        self.Cells = set()
+        self.Organisms = set()
         self.TypeOffCells = 0
 
         # We create a random new cell
@@ -179,6 +176,157 @@ class Model:
         # We initialize the population (which lives
         # in the grid).
         InitializePopulation(cell)
+
+
+
+    def ExecuteStep(self, priority="weight"):
+        """
+        Migration and division
+        """""
+        # We first make sure that we shuffle all the
+        # organisms, otherwise there would be a priority.
+        organisms_list = list(self.Organisms)
+        # At first I implemented a random priority, but I think it is
+        # more resonable to prioritize the heavier organisms.
+        if priority == "random":
+            random.shuffle(organisms_list)
+        elif priority == "weight":
+            # We first sort the
+            organisms_list = sorted(self.Organisms, key=lambda org: org.TRL, reverse=True)
+            # We first check if there are cells that have a
+
+        # We make sure that the occupied array is empty
+        for org in organisms_list:
+            if org.CRL > self.DivisionThreshold:
+                # All cells that are deviding have a counter
+                # that checks how long they hae been in the
+                # devision process. This counter is increased by one.
+                org.Division_Steps += 1
+                # If this counter exeeds some threshold, the cell divids.
+                # The CRL will be shared among the two new cells, ensuring
+                # that CRL > 0 and CRL < self.DivisionThreshold.
+                if org.Division_Steps >= self.DivisionTimeSteps:
+                    # all organisms then migrate one by one.
+                    org.Divide()
+            else:
+                # We otherwise perform migration
+                if org.CellAmount == 1:
+                    org.MigrateSingleCell()
+                else:
+                    org.MigrateMultiCell()
+
+        """
+        Resource Consumption
+        """""
+        # We deterine the position of all the cells
+        cells_list = list(self.Cells)
+        rows = np.array([cell.iPos for cell in cells_list])
+        cols = np.array([cell.jPos for cell in cells_list])
+
+        # We determine what the cells consume,
+        # with a maximum of 2 resources
+        available = self.Grid[rows, cols]
+        intakes = np.minimum(available, 2)
+
+        # We remove the intake from the grid
+        np.add.at(self.Grid, (rows, cols), -intakes)
+        self.Grid = np.maximum(self.Grid, 0)
+
+        # Then we add the intake to the cells
+        for i, cell in enumerate(cells_list):
+            cell.CRL += intakes[i]
+
+        """"
+        Cell death
+        """
+        # Update the organism CRL and determine which cells
+        # die
+        dead = []
+        for org in self.Organisms:
+            org.UpdateCRL()
+            if org.CRL <= 0:
+                dead.append(org)
+
+        for org in dead:
+            for pos in org.Positions:
+                self.Occupied.pop(pos, None)
+
+            for cell in org.Cells:
+                if cell in self.Cells:
+                    self.Cells.remove(cell)
+            if org in self.Organisms:
+                self.Organisms.remove(org)
+
+
+        # We update the grid to slowely
+        # regenerate to the original distribution
+        deficit = self.CarryingCapacity - self.Grid
+        self.Grid = np.minimum(
+            self.Grid + self.RegenaRate * deficit,
+            self.CarryingCapacity
+        )
+
+        # Info is updated for analysis
+        self.UpdateInfo()
+
+
+    def UpdateInfo(self):
+        # To determine the minimum and mean hamming distance
+        # We have set the following:
+        if self.Cells:
+            distances = np.array([cell.HammingDistance for cell in self.Cells])
+            self.TotalPopulation = len(distances)
+            self.MeanDistance = np.mean(distances)
+            self.STDDistance = np.std(distances)
+            self.MinimalDistance = np.min(distances)
+        else:
+            self.TotalPopulation = 0
+            self.MeanDistance = 0
+            self.STDDistance = 0
+            self.MinimalDistance = self.NumberOfGenes
+
+        if self.Organisms:
+            # Gather sizes of all current organisms
+            org_sizes = [org.CellAmount for org in self.Organisms]
+            self.MeanOrgSize = np.mean(org_sizes)
+            self.MaxOrgSize = np.max(org_sizes)
+            self.STDOrgSize = np.std(org_sizes)
+        else:
+            self.MeanOrgSize = 0.0
+            self.MaxOrgSize = 0
+            self.STDOrgSize = 0.0
+
+    def UpdateFitness(self):
+        if not self.Cells:
+            return
+        cells_list = list(self.Cells)
+
+        # Stack all expression patterns into a matrix
+        patterns = np.array([cell.ExpressionPattern for cell in cells_list])
+
+        # Compute all hamming distances at ones
+        distances = np.sum(patterns != self.Target, axis=1)
+
+        # Compute all fitnesses in one vectorised call
+        max_dist = len(self.Target)
+        fitnesses = (1 - (distances / max_dist)) ** self.FitnessPower
+
+        # Write results back to each cell
+        for i, cell in enumerate(cells_list):
+            cell.HammingDistance = int(distances[i])
+            cell.Fitness = float(fitnesses[i])
+
+    def SwitchTarget(self):
+        # We simply switch the target
+        if np.array_equal(self.Target, self.TargetA):
+            self.Target = self.TargetB
+            self.TargetID = "B"
+        else:
+            self.Target = self.TargetA
+            self.TargetID = "A"
+
+        self.UpdateFitness()
+        self.UpdateInfo()
 
     # def PriorityMigration(self, migrating_cells, stationary_cells):
     #     """"
@@ -282,167 +430,6 @@ class Model:
     #     # we assign the cells to their final position
     #     for idx, (cell, _, _) in enumerate(proposals):
     #         cell.iPos, cell.jPos = final_pos[idx]
-
-    def Migration(self, migrating_organisms):
-        # We shuffle the migrating organisims
-        random.shuffle(migrating_organisms)
-        # Then we go over all migrating organism
-        for migrating in migrating_organisms:
-            # all organisms then migrate one by one.
-            if migrating.CellAmount == 1:
-                migrating.MigrateSingleCell()
-            else:
-                migrating.MigrateMultiCell()
-
-    def Divide(self, dividing_organisims):
-        # We shuffle the migrating organism
-        random.shuffle(dividing_organisims)
-        # Then we go over all migrating org
-        for dividing in dividing_organisims:
-            if dividing.Division_Steps >= self.DivisionTimeSteps:
-                # all organisms then migrate one by one.
-                dividing.Divide()
-
-    def ExecuteStep(self):
-        # We first make sure that we shuffle all the
-        # organisms, otherwise there would be a priority.
-        random.shuffle(self.Organisms)
-        # We first check if there are cells that have a
-        # CRL higher then the division threshold: these
-        # are the dividing cells. We also want to
-        # keep track of all new born cells
-        dividing = []
-        migrating = []
-        # We make sure that the occupied array is empty
-        for org in self.Organisms:
-            if org.CRL > self.DivisionThreshold:
-                # All cells that are deviding have a counter
-                # that checks how long they hae been in the
-                # devision process. This counter is increased by one.
-                org.Division_Steps += 1
-                # If this counter exeeds some threshold, the cell divids.
-                # The CRL will be shared among the two new cells, ensuring
-                # that CRL > 0 and CRL < self.DivisionThreshold.
-                dividing.append(org)
-            else:
-                migrating.append(org)
-
-        self.Migration(migrating)
-        self.Divide(dividing)
-
-        # Cells consume food when present
-        for cell in self.Cells:
-            food = self.Grid[cell.iPos, cell.jPos]
-            # take up to 2, whatever is available
-            intake = min(food, 2)
-            self.Grid[cell.iPos, cell.jPos] -= intake
-            cell.CRL += intake
-
-        # Update the organism CRL and determine which cells
-        # die
-        dead = []
-        for org in self.Organisms:
-            org.UpdateCRL()
-            if org.CRL <= 0:
-                dead.append(org)
-
-        for org in dead:
-            for pos in org.Positions:
-                self.Occupied.pop(pos, None)
-
-            for cell in org.Cells:
-                if cell in self.Cells:
-                    self.Cells.remove(cell)
-            if org in self.Organisms:
-                self.Organisms.remove(org)
-
-
-        # We update the grid to slowely
-        # regenerate to the original distribution
-        deficit = self.CarryingCapacity - self.Grid
-        self.Grid = np.minimum(
-            self.Grid + self.RegenaRate * deficit,
-            self.CarryingCapacity
-        )
-
-        # Info is updated for analysis
-        self.UpdateInfo()
-
-
-    def UpdateInfo(self):
-        # To determine the minimum and mean hamming distance
-        # We have set the following:
-        distances = []
-        minimum = 21
-        for cell in self.Cells:
-            # cell being alive in the next step,
-            # we determine some properties about the grid
-            # for the analysis.
-            distances.append(cell.HammingDistance)
-            if cell.HammingDistance < minimum:
-                minimum = cell.HammingDistance
-
-        # We update the analysis
-        self.Timestep += 1
-        self.TotalPopulation = len(distances)
-        if self.TotalPopulation > 0:
-            self.MeanDistance = np.mean(distances)
-            self.STDDistance = np.std(distances)
-            self.MinimalDistance = minimum
-        else:
-            self.MeanDistance = 0
-            self.STDDDistance = 0
-            self.MinimalDistance = self.NumberOfGenes
-
-        # Gather sizes of all current organisms
-        org_sizes = [org.CellAmount for org in self.Organisms]
-
-        if len(org_sizes) > 0:
-            self.MeanOrgSize = np.mean(org_sizes)
-            self.MaxOrgSize = np.max(org_sizes)
-            self.STDOrgSize = np.std(org_sizes)
-        else:
-            self.MeanOrgSize = 0.0
-            self.MaxOrgSize = 0
-            self.STDOrgSize = 0.0
-
-    def SwitchTarget(self):
-        # We simply switch the target
-        if np.array_equal(self.Target, self.TargetA):
-            self.Target = self.TargetB
-            self.TargetID = "B"
-        else:
-            self.Target = self.TargetA
-            self.TargetID = "A"
-
-        # We then go over the grid to update all living cells
-        # To determine the minimum and mean hamming distance
-        # We have set the following:
-        minimum = 21
-        distances = []
-
-        # Then we loop over the entirety of the grid.
-        for cell in self.Cells:
-            # If the cell step resulted in the
-            # cell being alive in the next step,
-            # we determin some properties about the grid
-            # for the analysis.
-            cell.UpdateFitness()
-            distances.append(cell.HammingDistance)
-            if cell.HammingDistance < minimum:
-                minimum = cell.HammingDistance
-
-
-
-        if len(distances) > 0:
-            self.MeanDistance = np.mean(distances)
-            self.STDDistance = np.std(distances)
-            self.MinimalDistance = minimum
-        else:
-            self.MeanDistance = 0
-            self.STDDistance = 0
-            self.MinimalDistance = self.NumberOfGenes
-
 
 if __name__ == '__main__':
     model = Model()

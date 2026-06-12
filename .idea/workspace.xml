@@ -5,10 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1275e0d9-3b19-46d4-bf9e-c7a29d69c9b2" name="Changes" comment="First version-&#10;Current problem: scalability of GRN's">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Cell.py" beforeDir="false" afterPath="$PROJECT_DIR$/Cell.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Model.py" beforeDir="false" afterPath="$PROJECT_DIR$/Model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Organism.py" beforeDir="false" afterPath="$PROJECT_DIR$/Organism.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Window.py" beforeDir="false" afterPath="$PROJECT_DIR$/Window.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -47,21 +47,21 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.Cell.executor": "Run",
-    "Python.Experimentation.executor": "Run",
-    "Python.GRN Visualizer.executor": "Run",
-    "Python.GRNModel.executor": "Run",
-    "Python.Model.executor": "Run",
-    "Python.Temp.executor": "Run",
-    "Python.Window.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/Users/kerel/Documents/Documents/UU_KI/3.4 - CSP/CSP-Project",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.Cell.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Experimentation.executor&quot;: &quot;Run&quot;,
+    &quot;Python.GRN Visualizer.executor&quot;: &quot;Run&quot;,
+    &quot;Python.GRNModel.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Model.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Temp.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Window.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/kerel/Documents/Documents/UU_KI/3.4 - CSP/CSP-Project&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\kerel\Documents\Documents\UU_KI\3.4 - CSP\CSP-Project\Data" />
@@ -271,7 +271,23 @@
       <option name="project" value="LOCAL" />
       <updated>1779887330247</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="First version-&#10;Current problem: scalability of GRN's">
+      <option name="closed" value="true" />
+      <created>1780402176190</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1780402176190</updated>
+    </task>
+    <task id="LOCAL-00009" summary="First version-&#10;Current problem: scalability of GRN's">
+      <option name="closed" value="true" />
+      <created>1780402359881</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1780402359881</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

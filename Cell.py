@@ -1,7 +1,6 @@
 from __future__ import annotations
 import numpy as np
 import numpy.random as random
-import random as rnd
 from typing import TYPE_CHECKING
 import math
 if TYPE_CHECKING:
@@ -73,7 +72,7 @@ class Cell:
     """
     # We keep track of the current resource level
     # this is 10 on initialisation
-    CRL = 10
+    CRL = 10.0
 
     # When a cell is in division, it takes some amount of
     # time. Therefore we have to check how far it
@@ -180,6 +179,7 @@ class Cell:
         new_cell.GRN = np.copy(parent.GRN)
         new_cell.iPos = i_pos
         new_cell.jPos = j_pos
+        new_cell.AmountOfTypes = parent.AmountOfTypes
         new_cell.ID = id
         return new_cell
 
@@ -248,11 +248,15 @@ class Cell:
         # If a cell is alive the function returns True
         return True
 
-    def UpdateFitness(self):
+    def UpdateFitness(self, fitness_reduction = 1.5):
         # First we have to calculate the hamming distance
         self.HammingDistance = np.sum(self.ExpressionPattern != self.Model.Target)
         max_possible_distance = len(self.Model.Target)
-        self.Fitness = (1 - (self.HammingDistance / max_possible_distance)) ** self.Model.FitnessPower
+        # We never want the fitness to be 1, we actually don't
+        # even want it to be to close to 1, (otherwise the
+        # organism will only grow). We therefore introduce the fitness reduction,
+        # Wher the higher the value, the lower the maximum of the fitness.
+        self.Fitness = (1 - (self.HammingDistance / (max_possible_distance * fitness_reduction))) ** self.Model.FitnessPower
 
     def Mutate(self, mutation_factor=1,
                p_g_dup=2e-4, p_g_del=3e-4,
@@ -287,8 +291,9 @@ class Cell:
             # We check if there are duplecates in the
             # genes
             copies = np.sum(self.Genome[0] == gene_id)
-            # If there are no duplacates, the cell dies
-            if copies < 1:
+            # If there are no duplacates, the cell dies.
+            # it also dies if there are less then 20 genes
+            if copies < 1 or self.Genome.shape[1] < self.AmountOfTypes:
                 return False
             else:
                 return True
