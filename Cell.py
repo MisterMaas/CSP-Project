@@ -3,6 +3,7 @@ import numpy as np
 import numpy.random as random
 from typing import TYPE_CHECKING
 import math
+import json
 if TYPE_CHECKING:
     from GRNModel import Model
 
@@ -183,6 +184,29 @@ class Cell:
         new_cell.ID = id
         return new_cell
 
+    @classmethod
+    def FromJSON(cls, model, filepath):
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        cell = cls.__new__(cls)
+        cell.Model = model
+        cell.ID = data["ID"]
+        cell.iPos = data["iPos"]
+        cell.jPos = data["jPos"]
+        cell.NumberOfGenes = data["NumberOfGenes"]
+        cell.AmountOfTypes = data["AmountOfTypes"]
+        cell.IsStable = data["IsStable"]
+        cell.UniCellular = data["UniCellular"]
+        cell.CRL = data["CRL"]
+        cell.Division_Steps = data["Division_Steps"]
+        cell.HammingDistance = data["HammingDistance"]
+        cell.Fitness = data["Fitness"]
+        cell.Genome = np.array(data["Genome"], dtype=int)
+        cell.ExpressionPattern = np.array(data["ExpressionPattern"], dtype=int)
+        cell.GRN = np.array(data["GRN"], dtype=np.int8)
+        return cell
+
     def ExecutePropagation(self, propagation_steps = 11):
 
         def UpdateGenome():
@@ -248,15 +272,16 @@ class Cell:
         # If a cell is alive the function returns True
         return True
 
-    def UpdateFitness(self, fitness_reduction = 1.5):
+    def UpdateFitness(self):
         # First we have to calculate the hamming distance
         self.HammingDistance = np.sum(self.ExpressionPattern != self.Model.Target)
         max_possible_distance = len(self.Model.Target)
-        # We never want the fitness to be 1, we actually don't
-        # even want it to be to close to 1, (otherwise the
-        # organism will only grow). We therefore introduce the fitness reduction,
-        # Wher the higher the value, the lower the maximum of the fitness.
-        self.Fitness = (1 - (self.HammingDistance / (max_possible_distance * fitness_reduction))) ** self.Model.FitnessPower
+        # We apply the fitness function
+        fitness = (1 - (self.HammingDistance / max_possible_distance)) ** self.Model.FitnessPower
+        # We then apply a fitness "squeeze", because
+        # we always want some change of adhesion and never want 100 precent
+        # cance of adhesion
+        self.Fitness = fitness * (self.Model.MaxFitness - self.Model.MinFitness) + self.Model.MinFitness
 
     def Mutate(self, mutation_factor=1,
                p_g_dup=2e-4, p_g_del=3e-4,
@@ -369,7 +394,7 @@ class Cell:
             # genes
             # If there are no duplacates, the cell dies
             unique = np.unique(self.Genome[0])
-            return len(unique) == self.NumberOfGenes
+            return len(unique) >= self.AmountOfTypes
 
         def duplicate_percentage(p=0.15):
             # We decide how many cells will be deleted
@@ -448,6 +473,26 @@ class Cell:
     def propose_move(self, directions):
         di, dj = directions
         return (self.iPos + di) % self.Model.xSize, (self.jPos + dj) % self.Model.ySize
+
+    def ToJSON(self, filepath):
+        data = {
+            "ID": int(self.ID),
+            "iPos": int(self.iPos),
+            "jPos": int(self.jPos),
+            "NumberOfGenes": int(self.NumberOfGenes),
+            "AmountOfTypes": int(self.AmountOfTypes),
+            "IsStable": bool(self.IsStable),
+            "UniCellular": bool(self.UniCellular),
+            "CRL": float(self.CRL),
+            "Division_Steps": int(self.Division_Steps),
+            "HammingDistance": int(self.HammingDistance),
+            "Fitness": float(self.Fitness),
+            "Genome": self.Genome.tolist(),
+            "ExpressionPattern": self.ExpressionPattern.tolist(),
+            "GRN": self.GRN.tolist(),
+        }
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=2)
 
 
 

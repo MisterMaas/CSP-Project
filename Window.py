@@ -15,6 +15,7 @@ ACCENT = (0, 210, 180)
 BTN_GREEN = (30, 160, 90)
 BTN_ORANGE = (210, 110, 30)
 BTN_BLUE = (40, 120, 200)
+BTN_PURPLE = (130, 50, 200)
 GRAPH_BG = (18, 18, 25)
 TEXT = (210, 220, 230)
 TEXT_DIM = (110, 120, 135)
@@ -83,7 +84,6 @@ class Slider:
 
 
 class Button:
-
     def __init__(self, label, x, y, w, h, callback, color=BTN_GREEN):
         self.label = label
         self.rect = pygame.Rect(x, y, w, h)
@@ -115,7 +115,7 @@ class Window:
     GRAPH_H = 180
     FPS = 60
 
-    def __init__(self, win_w=1200, win_h=820):
+    def __init__(self, win_w=1200, win_h=1000):
         pygame.init()
         self.screen = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         pygame.display.set_caption("Evolution of Evolvable GRN")
@@ -125,15 +125,16 @@ class Window:
 
         self.model = None
         self.auto_run = False
+        self.max_speed_run = False  # <── Added track variable for max speed state
         self.sim_speed = 10
         self._auto_acc = 0.0
 
-        # Graph 1 Data History
+        # Graph 1 GRN-data History
         self.min_hist = []
         self.mean_hist = []
         self.std_hist = []  # <── Added for Hamming Distance STD
 
-        # Graph 2 Data History
+        # Graph 2 GRN-data History
         self.org_mean_hist = []
         self.org_max_hist = []
         self.org_std_hist = []
@@ -166,40 +167,68 @@ class Window:
         px, pw = 18, self.PANEL_W - 36
 
         self.sliders = [
-            Slider("Fitness Power", px, 25, pw, 1.0, 25.0, 10.0, fmt=lambda v: f"{v:.1f}",
+            Slider("Fitness Power", px, 25, pw, 1.0, 25.0, 7.5, fmt=lambda v: f"{v:.1f}",
                    callback=lambda v: self.model and setattr(self.model, "FitnessPower", v)),
-            Slider("Mut. Factor", px, 80, pw, 1.0, 150.0, 75.0, fmt=lambda v: f"{v:.1f}",
+            Slider("Min. Fitness", px, 80, pw, 0.0, 1.0, 0.005, fmt=lambda v: f"{v:.2f}",
+                   callback=self._on_min_fitness_change),
+            Slider("Max. Fitness", px, 135, pw, 0.0, 1.0, 0.75, fmt=lambda v: f"{v:.2f}",
+                   callback=self._on_max_fitness_change),
+            Slider("Mut. Factor", px, 190, pw, 1.0, 150.0, 50.0, fmt=lambda v: f"{v:.1f}",
                    callback=lambda v: self.model and setattr(self.model, "MutationFactor", v)),
-            Slider("Mean Resource", px, 135, pw, 0.0, 5.0, 2.0, fmt=lambda v: f"{v:.1f}"),
-            Slider("SD Resource", px, 190, pw, 0.0, 5.0, 2.0, fmt=lambda v: f"{v:.1f}"),
-            Slider("Regen Rate", px, 245, pw, 0.0, 0.1, 0.05, fmt=lambda v: f"{v:.3f}",
+            Slider("Mean Resource", px, 245, pw, 0.0, 5.0, 1.0, fmt=lambda v: f"{v:.1f}"),
+            Slider("SD Resource", px, 300, pw, 0.0, 7.5, 5.0, fmt=lambda v: f"{v:.1f}"),
+            Slider("Regen Rate", px, 355, pw, 0.0, 0.1, 0.05, fmt=lambda v: f"{v:.3f}",
                    callback=lambda v: self.model and setattr(self.model, "RegenRate", v)),
-            Slider("Sim Speed", px, 300, pw, 1, 500, 10, callback=lambda v: setattr(self, "sim_speed", v)),
-            Slider("Div. Threshold", px, 355, pw, 5, 50, 15,
+            Slider("Sim Speed", px, 410, pw, 1, 500, 10, callback=lambda v: setattr(self, "sim_speed", v)),
+            Slider("Div. Threshold", px, 465, pw, 5, 50, 15,
                    callback=lambda v: self.model and setattr(self.model, "DivisionThreshold", v)),
-            Slider("Div. Timesteps", px, 410, pw, 1, 30, 5,
+            Slider("Div. Timesteps", px, 520, pw, 1, 30, 5,
                    callback=lambda v: self.model and setattr(self.model, "DivisionTimeSteps", v)),
         ]
 
         bh, gap = 34, 6
-        by = 470
+        by = 530
+
+        # Expanded space to neatly tuck in the new maximum speed button
         self.buttons = [
             Button("Reset", px, by, pw, bh, self._reset, BTN_GREEN),
             Button("Step", px, by + (bh + gap), pw, bh, self._step, BTN_GREEN),
             Button("▶  Auto Run", px, by + 2 * (bh + gap), pw, bh, self._toggle_auto, BTN_GREEN),
-            Button("Switch Target", px, by + 3 * (bh + gap), pw, bh, self._switch, BTN_BLUE),
-            Button("🎬 Save Video", px, by + 4 * (bh + gap), pw, bh, self._save_video, BTN_BLUE),
+            Button("⚡ Max Speed", px, by + 3 * (bh + gap), pw, bh, self._toggle_max_speed, BTN_PURPLE),
+            # <── New button
+            Button("Switch Target", px, by + 4 * (bh + gap), pw, bh, self._switch, BTN_BLUE),
+            Button("🎬 Save Video", px, by + 5 * (bh + gap), pw, bh, self._save_video, BTN_BLUE),
         ]
         self._auto_btn = self.buttons[2]
+        self._max_speed_btn = self.buttons[3]  # <── Added reference pointer
+
+    def _on_min_fitness_change(self, val):
+        max_slider = self.sliders[2]  # <── Points to Max. Fitness
+        if val >= max_slider.value:
+            val = max_slider.value - 1e-4
+            self.sliders[1].value = val  # <── Clamps Min. Fitness
+        if self.model:
+            self.model.MinFitness = val
+
+    def _on_max_fitness_change(self, val):
+        min_slider = self.sliders[1]  # <── Points to Min. Fitness
+        if val <= min_slider.value:
+            val = min_slider.value + 1e-4
+            self.sliders[2].value = val  # <── Clamps Max. Fitness
+        if self.model:
+            self.model.MaxFitness = val
 
     def _reset(self):
-        fp = self.sliders[0].value if hasattr(self, "sliders") else 10
-        mf = self.sliders[1].value if hasattr(self, "sliders") else 1.0
-        mr = self.sliders[2].value if hasattr(self, "sliders") else 5.0
-        sdr = self.sliders[3].value if hasattr(self, "sliders") else 3.0
-        rr = self.sliders[4].value if hasattr(self, "sliders") else 0.05
-        d_th = self.sliders[6].value if hasattr(self, "sliders") else 15
-        d_ts = self.sliders[7].value if hasattr(self, "sliders") else 5
+        fp = self.sliders[0].value if hasattr(self, "sliders") else 10.0  # Fitness Power
+        min_fit = self.sliders[1].value if hasattr(self, "sliders") else 0.1  # Min. Fitness <── New
+        max_fit = self.sliders[2].value if hasattr(self, "sliders") else 1.0  # Max. Fitness <── New
+        mf = self.sliders[3].value if hasattr(self, "sliders") else 75.0  # Mut. Factor
+        mr = self.sliders[4].value if hasattr(self, "sliders") else 2.0  # Mean Resource
+        sdr = self.sliders[5].value if hasattr(self, "sliders") else 2.0  # SD Resource
+        rr = self.sliders[6].value if hasattr(self, "sliders") else 0.05  # Regen Rate
+        # index 8 = Sim Speed (not passed to Model)
+        d_th = self.sliders[8].value if hasattr(self, "sliders") else 15  # Div. Threshold
+        d_ts = self.sliders[9].value if hasattr(self, "sliders") else 5  # Div. Timesteps
 
         self.model = Model(
             fitness_power=fp,
@@ -209,6 +238,8 @@ class Window:
             regen_rate=rr,
             division_thres=d_th,
             division_timesteps=d_ts,
+            min_fitness=min_fit,
+            max_fitness=max_fit,
         )
         self.min_hist.clear()
         self.mean_hist.clear()
@@ -219,6 +250,10 @@ class Window:
         self._auto_acc = 0.0
         self.id_colors.clear()
         self.frame_buffer.clear()
+
+        # Turn off execution flags on reset
+        self.max_speed_run = False
+        self.auto_run = False
 
     def _step(self):
         if self.model is None:
@@ -244,6 +279,10 @@ class Window:
             self.org_std_hist = self.org_std_hist[-MAX_HIST:]
 
     def _toggle_auto(self):
+        # Force turn off Max Speed mode if enabling standard Auto Run
+        if self.max_speed_run:
+            self._toggle_max_speed()
+
         self.auto_run = not self.auto_run
         if self.auto_run:
             self._auto_btn.label = "⏸  Pause"
@@ -251,6 +290,20 @@ class Window:
         else:
             self._auto_btn.label = "▶  Auto Run"
             self._auto_btn.color = BTN_GREEN
+
+    def _toggle_max_speed(self):
+        """Toggles maximum possible step iterations per frame cycle."""
+        # Force turn off Standard Auto Run if enabling Max Speed
+        if self.auto_run:
+            self._toggle_auto()
+
+        self.max_speed_run = not self.max_speed_run
+        if self.max_speed_run:
+            self._max_speed_btn.label = "⏸  Stop Max"
+            self._max_speed_btn.color = BTN_ORANGE
+        else:
+            self._max_speed_btn.label = "⚡ Max Speed"
+            self._max_speed_btn.color = BTN_PURPLE
 
     def _switch(self):
         if self.model:
@@ -367,24 +420,17 @@ class Window:
         n = len(mean_hist)
         if n < 2: return
 
-        # Form a list of points representing the upper edge and lower edge
         upper_pts = []
         lower_pts = []
 
         for i in range(n):
             x = pad + int(i / (n - 1) * gw)
-
-            # Map values with clipping bounds to prevent drawing out of bounds
             y_high = pad + gh - int(max(0, min(max_val, mean_hist[i] + std_hist[i])) / max_val * gh)
             y_low = pad + gh - int(max(0, min(max_val, mean_hist[i] - std_hist[i])) / max_val * gh)
-
             upper_pts.append((x, y_high))
             lower_pts.append((x, y_low))
 
-        # Join paths together to create a solid polygon wrap
         polygon_points = upper_pts + lower_pts[::-1]
-
-        # Use an alpha surface layer to get transparent blending in Pygame
         temp_surface = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
         pygame.draw.polygon(temp_surface, (*color_rgb, alpha), polygon_points)
         surf.blit(temp_surface, (0, 0))
@@ -412,7 +458,6 @@ class Window:
             surf.blit(self.font.render("Waiting for data…", True, TEXT_DIM), (pad + 8, pad + gh // 2))
             return surf
 
-        # 1. Draw Shaded STD Deviation Band (Drawn first so it stays behind lines)
         if len(self.std_hist) == n:
             self._draw_error_band(surf, pad, gw, gh, max_val, self.mean_hist, self.std_hist, (255, 160, 40))
 
@@ -421,16 +466,13 @@ class Window:
             y = pad + gh - int(v / max_val * gh)
             return x, y
 
-        # 2. Draw lines
         for i in range(n - 1):
             pygame.draw.line(surf, (0, 210, 220), px(i, self.min_hist[i]), px(i + 1, self.min_hist[i + 1]), 2)
             pygame.draw.line(surf, (255, 160, 40), px(i, self.mean_hist[i]), px(i + 1, self.mean_hist[i + 1]), 2)
 
-        # Legend Metrics
         pygame.draw.line(surf, (0, 210, 220), (pad, 8), (pad + 20, 8), 2)
         surf.blit(self.font.render("min dist", True, (0, 210, 220)), (pad + 24, 1))
 
-        # Combined line and band box icon marker for legend
         pygame.draw.rect(surf, (255, 160, 40, 60), (pad + 90, 4, 20, 8))
         pygame.draw.line(surf, (255, 160, 40), (pad + 90, 8), (pad + 110, 8), 2)
         surf.blit(self.font.render("mean dist (±std)", True, (255, 160, 40)), (pad + 114, 1))
@@ -464,7 +506,6 @@ class Window:
             pygame.draw.line(surf, DIVIDER, (pad - 4, y), (pad + gw, y))
             surf.blit(self.font.render(str(v), True, TEXT_DIM), (2, y - 7))
 
-        # 1. Draw Shaded STD Deviation Band around the Organism Mean Size
         self._draw_error_band(surf, pad, gw, gh, max_val, self.org_mean_hist, self.org_std_hist, (50, 220, 100))
 
         def px(i, v):
@@ -472,13 +513,11 @@ class Window:
             y = pad + gh - int(v / max_val * gh)
             return x, y
 
-        # 2. Draw metric lines
         for i in range(n - 1):
             pygame.draw.line(surf, (240, 50, 100), px(i, self.org_max_hist[i]), px(i + 1, self.org_max_hist[i + 1]), 2)
             pygame.draw.line(surf, (50, 220, 100), px(i, self.org_mean_hist[i]), px(i + 1, self.org_mean_hist[i + 1]),
                              2)
 
-        # Draw Legend Labels
         pygame.draw.line(surf, (240, 50, 100), (pad, 8), (pad + 20, 8), 2)
         surf.blit(self.font.render("max size", True, (240, 50, 100)), (pad + 24, 1))
 
@@ -500,7 +539,7 @@ class Window:
         for s in self.sliders: s.draw(surf, self.font)
         for b in self.buttons: b.draw(surf, self.font)
 
-        sy = 650
+        sy = 795 # Push down slightly to account for the extra button
         pygame.draw.line(surf, DIVIDER, (12, sy - 8), (self.PANEL_W - 12, sy - 8))
 
         if self.model is None:
@@ -535,13 +574,21 @@ class Window:
                 for s in self.sliders: s.handle(event, panel_origin)
                 for b in self.buttons: b.handle(event, panel_origin)
 
-            if self.auto_run and self.model:
-                self._auto_acc += dt
-                interval = 1000 / max(1, self.sim_speed)
-                self._auto_acc = min(self._auto_acc, interval * 2)
-                while self._auto_acc >= interval:
-                    self._step()
-                    self._auto_acc -= interval
+            # ── [UPDATED EXECUTION SECTION] ──────────────────────────────────
+            if self.model:
+                if self.max_speed_run:
+                    # Run 50 continuous iterations per frame to max out your CPU
+                    # without locking up the Windows OS window responsiveness.
+                    for _ in range(50):
+                        self._step()
+                elif self.auto_run:
+                    self._auto_acc += dt
+                    interval = 1000 / max(1, self.sim_speed)
+                    self._auto_acc = min(self._auto_acc, interval * 2)
+                    while self._auto_acc >= interval:
+                        self._step()
+                        self._auto_acc -= interval
+            # ─────────────────────────────────────────────────────────────────
 
             self.screen.fill(BG)
             self.screen.blit(self._render_grid(), (0, 0))

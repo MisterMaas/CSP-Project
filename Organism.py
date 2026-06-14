@@ -1,11 +1,8 @@
 from __future__ import annotations
-import Cell
 import math
 from typing import TYPE_CHECKING
 import numpy as np
 import numpy.random as random
-
-from Cell import Cell
 
 if TYPE_CHECKING:
     from Model import Model
@@ -17,6 +14,9 @@ class Organism:
     CRL: int
     Division_Steps: int
     CellAmount: int
+    MaxFitness : float
+
+    TestSame = 0
 
     """"
     Devision
@@ -47,12 +47,12 @@ class Organism:
         self.Division_Steps = 0
         self.CellAmount = 1
         self.Directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        self.MaxFitness = cell.Fitness
 
     def Warp(self, direction, position):
         di, dj = direction
         i, j = position
-        warp = ((i + di) % self.Model.xSize, (j + dj) % self.Model.ySize)
-        return warp
+        return (int((i + di) % self.Model.xSize), int((j + dj) % self.Model.ySize))
 
     def Divide(self):
         # We take a random amount of cells
@@ -94,19 +94,20 @@ class Organism:
                         # The cell of the parent is placed at the border of the
                         # organism.
                         new_cell = parent.CopyCell(parent, di, dj, self.Cells[i].ID)
+                        alive = new_cell.Mutate(mutation_factor=self.Model.MutationFactor)
+                        # The cell might die after mutation
+                        if not alive:
+                            # We then ignore this cell
+                            continue
                         # The CRL is devided between the new cell and
                         # the parent
                         new_cell.CRL = parent.CRL // 2
                         parent.CRL = parent.CRL // 2
                         # The new cell posibly mutates
-                        new_cell.Mutate(mutation_factor=self.Model.MutationFactor)
+
                         # After the cell is formed, it can stick to the organism
                         # or can become it's own organism depending on the fitness
-                        if random.random() > cell.Fitness:
-                            org = Organism(self.Model, new_cell, (di, dj))
-                            self.Model.Organisms.add(org)
-                            self.Model.Occupied[(di, dj)] = org
-                        else:
+                        if random.random() < (cell.Fitness * self.MaxFitness):
                             # Otherwise the cell will stick to the organism
                             self.Cells.append(new_cell)
                             self.Positions.append((di, dj))
@@ -114,8 +115,12 @@ class Organism:
                             self.Model.Occupied[(di, dj)] = self
                             cell.UniCellular = False
                             new_cell.UniCellular = False
-
-                        self.Model.Cells.add(new_cell)
+                            if cell.Fitness > self.MaxFitness:
+                                self.MaxFitness = cell.Fitness
+                        else:
+                            org = Organism(self.Model, new_cell, (di, dj))
+                            self.Model.Organisms.add(org)
+                            self.Model.Occupied[(di, dj)] = org
                         placed = True
                         break
 
@@ -125,6 +130,138 @@ class Organism:
         # and the division steps
         self.Division_Steps = 0
         return None
+
+    def MigrateSingleCell(self):
+        # We remember the last position
+        last_pos = self.Positions[0]
+        cell = self.Cells[0]
+
+        # Moving cost one resource
+        cell.CRL -= 1
+        if cell.CRL == 0:
+            # If the resource level is 0,
+            # the cell dies and does not perform
+            # any action
+            return
+        # We try out all possible directions
+        # for a given organism
+        directions = list(self.Model.Directions)
+        random.shuffle(directions)
+        for dir in directions:
+            # The migrating cell proposes a position
+            proposed = self.Warp(dir, last_pos)
+            # if this position is not occupied, the organism can move to
+            # this position:
+            if proposed not in self.Model.Occupied:
+                # If the cell is free to move, it
+                # will move to this position
+                self.Model.Occupied.pop(last_pos, None)
+
+                # Move the cell
+                cell.iPos, cell.jPos = proposed
+                self.Positions = [proposed]
+
+                # Add to new position in the dictionary
+                self.Model.Occupied[proposed] = self
+                break
+            # When the grid is not free, there is a probability
+            # that the cell adheres to the colliding organism. They
+            # then form a new organism.
+            collided_organism = self.Model.Occupied[proposed]
+            if random.random() < (cell.Fitness * collided_organism.MaxFitness):
+
+                # Delete the single celled organism
+                self.Model.Occupied.pop(last_pos, None)
+                self.Model.Organisms.remove(self)
+                cell.UniCellular = False
+
+                cell.iPos, cell.jPos = last_pos
+
+                # Cell gets absorbed by neighbor
+                collided_organism.Cells.append(cell)
+                collided_organism.Positions.append(last_pos)
+
+                if collided_organism.MaxFitness < cell.Fitness:
+                    collided_organism.MaxFitness = cell.Fitness
+
+                if collided_organism.CellAmount == 1:
+                    collided_organism.Cells[0].UniCellular = False
+                collided_organism.CellAmount += 1
+
+                # Update the grid
+                self.Model.Occupied[last_pos] = collided_organism
+
+                # Update resource of new organism
+                collided_organism.UpdateCRL()
+                break
+
+
+
+    def MigrateMultiCell(self):
+        # Keeps track of the current position
+        fallback = list(self.Positions)
+
+        # We keep a dictionary that holds the
+        # directions as keys and the total recourse
+        # as it's value
+        dictionary = {}
+
+        # we keep track of all the positions that are occupied
+        others_occupied = set(self.Model.Occupied.keys()) - set(self.Positions)
+
+        # We say that the model possibly proposes it's
+        # current position. It does this when there is
+        # is no other posistion possible
+        proposed = list(self.Positions)
+        # We try out all possible directions
+        # for a given organism
+        directions = list(self.Model.Directions)
+        random.shuffle(directions)
+        for dir in directions:
+            # The migrating cell proposes a candidate
+            candidate = [self.Warp(dir, pos) for pos in self.Positions]
+            candidate_set = set(candidate)
+
+            if candidate_set.isdisjoint(others_occupied):
+                # If the organism is multi-cellular, all possible
+                # directions are checked and stored in the dictionary
+                TRL = sum(self.Model.Grid[di, dj] for di, dj in candidate)
+                dictionary[tuple(candidate)] = TRL
+
+        # We check wether the dict is is non empty.
+        if dictionary:
+            # We select the best direction:
+            best = max(dictionary, key=lambda k: dictionary[k])
+            proposed = list(best)
+        else:
+            # otherwise we fall back to the current position
+            proposed = fallback
+
+        # We remove the old positions from occupied
+        for pos in self.Positions:
+            self.Model.Occupied.pop(pos, None)
+
+        # Assign all the cells to the new position
+        for cell, new_pos in zip(self.Cells, proposed):
+            cell.iPos, cell.jPos = new_pos
+            cell.CRL -= 1
+
+        # Assign the organism to the new position
+        self.Positions = proposed
+
+        # And update occupied
+        for pos in proposed:
+            self.Model.Occupied[pos] = self
+
+    def UpdateCRL(self):
+        self.TRL = sum(cell.CRL for cell in self.Cells)
+        self.CRL = math.floor(self.TRL / self.CellAmount)
+        # Sync back so cells and organism agree
+        for cell in self.Cells:
+            cell.CRL = self.CRL
+        return self.CRL
+
+
 
     # def DivideOrganism(self):
     #     ### This was pretty much vibe coded.
@@ -212,118 +349,3 @@ class Organism:
     #             return None
 
 
-
-
-
-    def MigrateSingleCell(self):
-        # We remember the last position
-        last_pos = self.Positions[0]
-        cell = self.Cells[0]
-        # We try out all possible directions
-        # for a given organism
-        directions = list(self.Model.Directions)
-        random.shuffle(directions)
-        for dir in directions:
-            # The migrating cell proposes a position
-            proposed = self.Warp(dir, last_pos)
-            # if this position is not occupied, the organism can move to
-            # this position:
-            if proposed not in self.Model.Occupied:
-                # If the cell is free to move, it
-                # will move to this position
-                self.Model.Occupied.pop(last_pos, None)
-
-                # Move the cell
-                cell.iPos, cell.jPos = proposed
-                cell.CRL -= 1
-                self.Positions = [proposed]
-
-                # Add to new position in the dictionary
-                self.Model.Occupied[proposed] = self
-                break
-            # When the grid is not free, there is a probability
-            # that the cell adheres to the colliding cell. They
-            # then form a new organism.
-            elif random.random() < cell.Fitness:
-                collided_organism = self.Model.Occupied[proposed]
-
-                # Delete the single celled organism
-                self.Model.Occupied.pop(last_pos, None)
-                self.Model.Organisms.remove(self)
-                cell.UniCellular = False
-
-                cell.iPos, cell.jPos = last_pos
-
-                # Cell gets absorbed by neighbor
-                collided_organism.Cells.append(cell)
-                collided_organism.Positions.append(last_pos)
-
-                if collided_organism.CellAmount == 1:
-                    collided_organism.Cells[0].UniCellular = False
-                collided_organism.CellAmount += 1
-
-                # Update the grid
-                self.Model.Occupied[last_pos] = collided_organism
-
-                # Update resource of new organism
-                collided_organism.UpdateCRL()
-                break
-
-
-    def MigrateMultiCell(self):
-        # We first remove the current position from
-        # the occupied position of the model
-        for pos in self.Positions:
-            self.Model.Occupied.pop(pos, None)
-
-        # We keep a dictionary that holds the
-        # directions as keys and the total recourse
-        # as it's value
-        dictionary = {}
-
-        # We say that the model possibly proposes it's
-        # current position. It does this when there is
-        # is no other posistion possible
-        proposed = list(self.Positions)
-        # We try out all possible directions
-        # for a given organism
-        directions = list(self.Model.Directions)
-        random.shuffle(directions)
-        for dir in directions:
-            # The migrating cell proposes a position
-            proposed = [self.Warp(dir, pos) for pos in self.Positions]
-            # if this position is not occupied, the organism can move to
-            # this position:
-            if set(proposed).isdisjoint(set(self.Model.Occupied)):
-                proposed_tuple = tuple(proposed)
-                # If the organism is multi-cellular, all possible
-                # directions are checked and stored in the dictionary
-                TRL = sum([self.Model.Grid[di,dj] for di,dj in proposed])
-                dictionary[proposed_tuple] = TRL
-
-
-        # We check wether the dict is is non empty.
-        if len(dictionary) > 0:
-            # This dictionary is than sorted, meaning that the first
-            sorted_dict = dict(sorted(dictionary.items(), key=lambda item: item[1], reverse=True))
-            # Convert the key (tuple) back to a list of positions
-            proposed = list(list(sorted_dict)[0]) if sorted_dict else proposed
-
-        # The position is updated
-        for cell, new_pos in zip(self.Cells, proposed):
-            cell.iPos, cell.jPos = new_pos
-            cell.CRL -= 1
-
-        self.Positions = proposed
-
-        # Add new positions
-        for pos in proposed:
-            self.Model.Occupied[pos] = self
-
-    def UpdateCRL(self):
-        self.TRL = sum(cell.CRL for cell in self.Cells)
-        self.CRL = math.floor(self.TRL / self.CellAmount)
-        # Sync back so cells and organism agree
-        for cell in self.Cells:
-            cell.CRL = self.CRL
-        return self.CRL

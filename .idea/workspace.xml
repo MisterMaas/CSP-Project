@@ -7,6 +7,47 @@
     <list default="true" id="1275e0d9-3b19-46d4-bf9e-c7a29d69c9b2" name="Changes" comment="First version-&#10;Current problem: scalability of GRN's">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Cell.py" beforeDir="false" afterPath="$PROJECT_DIR$/Cell.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-1.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-1.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-1.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-1.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-1.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-1.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-1.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-1.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-1.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-1.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-2.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-2.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-2.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-2.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-2.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-2.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-2.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-2.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-2.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-2.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-3.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-3.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-3.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-3.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-3.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-3.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-3.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-3.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-3.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-3.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-4.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-4.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-4.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-4.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-4.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-4.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-4.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-4.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-4.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-4.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-5.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-5.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-5.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-5.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-5.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-5.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-5.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-5.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-5.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-5.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-6.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-6.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-6.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-6.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-6.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-6.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-6.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-6.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-6.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-6.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-7.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-7.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-7.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-7.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-7.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-7.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-7.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-7.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-7.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-7.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-8.0.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-8.0.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-8.1.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-8.1.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-8.2.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-8.2.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-8.3.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-8.3.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Data/Data-8.4.txt" beforeDir="false" afterPath="$PROJECT_DIR$/GRN-data/Data-8.4.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Experimentation.py" beforeDir="false" afterPath="$PROJECT_DIR$/Experimentation.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Model.py" beforeDir="false" afterPath="$PROJECT_DIR$/Model.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Organism.py" beforeDir="false" afterPath="$PROJECT_DIR$/Organism.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Window.py" beforeDir="false" afterPath="$PROJECT_DIR$/Window.py" afterDir="false" />
@@ -24,6 +65,19 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <excluded-from-favorite>
+      <branch-storage>
+        <map>
+          <entry type="REMOTE">
+            <value>
+              <list>
+                <branch-info repo="$PROJECT_DIR$" source="origin/master" />
+              </list>
+            </value>
+          </entry>
+        </map>
+      </branch-storage>
+    </excluded-from-favorite>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
@@ -68,7 +122,29 @@
       <recent name="C:\Users\kerel\Documents\Documents\UU_KI\3.4 - CSP\CSP-Project" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.Experimentation">
+    <configuration name="Experimentation" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CSP_Project" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Experimentation.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="Window" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="CSP_Project" />
       <option name="ENV_FILES" value="" />
@@ -195,6 +271,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.Experimentation" />
         <item itemvalue="Python.Window" />
       </list>
     </recent_temporary>
@@ -287,7 +364,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780402359881</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="First version-&#10;Current problem: scalability of GRN's">
+      <option name="closed" value="true" />
+      <created>1781271051136</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1781271051136</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

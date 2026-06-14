@@ -1,5 +1,3 @@
-from dis import Positions
-
 import numpy.random as random
 import numpy as np
 from FyeldGenerator import generate_field
@@ -9,6 +7,8 @@ from Organism import Organism
 class Model:
     # Population parameters
     FitnessPower : int
+    MinFitness : float
+    MaxFitness : float
     MutationFactor : int
     NumberOfGenes : int
 
@@ -20,9 +20,11 @@ class Model:
 
     # We keep track off all the cells that are
     # alive in the gird
-    Cells : set
     Occupied = {}
     Organisms : set
+    @property
+    def Cells(self):
+        return {cell for org in self.Organisms for cell in org.Cells}
     RegenaRate : float
     DivisionThreshold : int
     DivisionTimeSteps : int
@@ -53,10 +55,10 @@ class Model:
     Directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
     def __init__(self, initial_pop_density = 0.025, mean_resource = 5,
-                 sd_recourse = 3, x_size = 100, y_size = 100,
+                 sd_recourse = 3, x_size = 25, y_size = 25,
                  fitness_power= 1, mutation_factor=15, number_of_genes = 20,
                  regen_rate = 0.05, division_thres = 15,
-                 division_timesteps = 5):
+                 division_timesteps = 5, min_fitness = 0.0, max_fitness = 0.9):
         def FindTargets(expression_pattern: np.array):
             # Find the two targets
             def flip_expression(indices, original):
@@ -122,8 +124,6 @@ class Model:
             # of the distribution such that it can slowely regenerate.
             self.CarryingCapacity = self.Grid.copy()
 
-            print(self.Grid)
-
         def InitializePopulation(parent: Cell):
             # We go over all indexces of the grid
             self.TypeOffCells = 0
@@ -135,7 +135,6 @@ class Model:
                         cell = Cell.CopyCell(parent, i, j, self.TypeOffCells)
                         cell.CRL = 10
                         self.TypeOffCells += 1
-                        self.Cells.add(cell)
                         org = Organism(self, cell, (i, j))
                         self.Organisms.add(org)
                         self.Occupied[(i, j)] = org
@@ -145,6 +144,8 @@ class Model:
         self.MutationFactor = mutation_factor
         self.NumberOfGenes = number_of_genes
         self.FitnessPower = fitness_power
+        self.MinFitness = min_fitness
+        self.MaxFitness = max_fitness
         self.RegenaRate = regen_rate
         self.DivisionThreshold = division_thres
         self.DivisionTimeSteps = division_timesteps
@@ -152,7 +153,6 @@ class Model:
         self.xSize = x_size
         self.ySize = y_size
 
-        self.Cells = set()
         self.Organisms = set()
         self.TypeOffCells = 0
 
@@ -183,6 +183,7 @@ class Model:
         """
         Migration and division
         """""
+        self.Timestep += 1
         # We first make sure that we shuffle all the
         # organisms, otherwise there would be a priority.
         organisms_list = list(self.Organisms)
@@ -195,8 +196,13 @@ class Model:
             organisms_list = sorted(self.Organisms, key=lambda org: org.TRL, reverse=True)
             # We first check if there are cells that have a
 
+        # We keep track of all organisms that die:
+        dead = []
+
         # We make sure that the occupied array is empty
         for org in organisms_list:
+            """""TEMP"""
+            org_pos = org.Positions
             if org.CRL > self.DivisionThreshold:
                 # All cells that are deviding have a counter
                 # that checks how long they hae been in the
@@ -215,13 +221,22 @@ class Model:
                 else:
                     org.MigrateMultiCell()
 
+            if org_pos == org.Positions:
+                # There is a problem with organisms staying in one position
+                # we simply say that if an organism moves to little, it does
+                org.TestSame +=1
+                if org.TestSame > self.DivisionTimeSteps*5:
+                    dead.append(org)
+            else:
+                org.TestSame = 0
+
         """
         Resource Consumption
         """""
         # We deterine the position of all the cells
         cells_list = list(self.Cells)
-        rows = np.array([cell.iPos for cell in cells_list])
-        cols = np.array([cell.jPos for cell in cells_list])
+        rows = np.array([cell.iPos for cell in cells_list], dtype=int)
+        cols = np.array([cell.jPos for cell in cells_list], dtype=int)
 
         # We determine what the cells consume,
         # with a maximum of 2 resources
@@ -241,7 +256,6 @@ class Model:
         """
         # Update the organism CRL and determine which cells
         # die
-        dead = []
         for org in self.Organisms:
             org.UpdateCRL()
             if org.CRL <= 0:
@@ -250,12 +264,7 @@ class Model:
         for org in dead:
             for pos in org.Positions:
                 self.Occupied.pop(pos, None)
-
-            for cell in org.Cells:
-                if cell in self.Cells:
-                    self.Cells.remove(cell)
-            if org in self.Organisms:
-                self.Organisms.remove(org)
+            self.Organisms.remove(org)
 
 
         # We update the grid to slowely
@@ -310,6 +319,7 @@ class Model:
         # Compute all fitnesses in one vectorised call
         max_dist = len(self.Target)
         fitnesses = (1 - (distances / max_dist)) ** self.FitnessPower
+        fitnesses = fitnesses * (self.MaxFitness - self.MinFitness) + self.MinFitness
 
         # Write results back to each cell
         for i, cell in enumerate(cells_list):
