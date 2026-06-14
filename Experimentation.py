@@ -332,12 +332,12 @@ if __name__ == '__main__':
               f"ti{MODEL_PARAMS["division_timesteps"]}")
 
     #── run ───────────────────────────────────────────────────────────────────
-    args = [(i, MODEL_PARAMS) for i in range(AMOUNT_OF_RUNS)]
-
-    start = time.time()
-    with Pool() as pool:
-        pool.map(run_experiment, args)
-    print(f"All runs finished in {time.time() - start:.1f}s")
+    # args = [(i, MODEL_PARAMS) for i in range(AMOUNT_OF_RUNS)]
+    #
+    # start = time.time()
+    # with Pool() as pool:
+    #     pool.map(run_experiment, args)
+    # print(f"All runs finished in {time.time() - start:.1f}s")
 
     # ── plot ──────────────────────────────────────────────────────────────────
     files = [f"{DATA_DIR}/{folder}/{EXPERIMENT_ID}.{i}.txt" for i in range(AMOUNT_OF_RUNS)]
