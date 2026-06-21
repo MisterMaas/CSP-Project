@@ -16,16 +16,16 @@ from multiprocessing import Pool
 
 EXPERIMENT_ID   = 1
 AMOUNT_OF_RUNS  = 5           # number of parallel runs
-MAX_TIMESTEPS   = 5_000_000   # steps per run
-LAMBDA          = 3e-6        # probability of target switch per step
+MAX_TIMESTEPS   = 500_000       # steps per run
+LAMBDA          = 0      # probability of target switch per step
 WRITE_INTERVAL  = 1_000       # how often to flush buffer to disk
 LOG_INTERVAL    = 10_000      # how often to print progress
 
 # Model parameters — passed to every run
 MODEL_PARAMS = dict(
-    fitness_power   = 2.5,
+    fitness_power   = 100,
     min_fitness = 0.0,
-    max_fitness = 0.9,
+    max_fitness = 1,
     mutation_factor = 75,
     mean_resource   = 2.0,
     sd_recourse     = 2.0,
@@ -41,11 +41,15 @@ DATA_DIR = "Data"
 #  PLOTTING
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Set font family globally to Times New Roman
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Times New Roman']
+
 def plot_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 100):
     """
     Plot a single experiment file with stacked subplots.
       - Top:    Hamming distance statistics (min, mean ± std)
-      - Bottom: Population statistics (total population, mean/max org size) [Optional]
+      - Bottom: Population statistics (total population, mean org size ± std) [Optional]
 
     Pass axes=(ax_top, ax_bottom) to embed in a larger figure,
     or leave as None to create a standalone figure.
@@ -76,6 +80,28 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
     max_org    = data[:, 6]
     std_org    = data[:, 7]
 
+    # ── B&W palette ───────────────────────────────────────────────────────────
+    COLOR_BG      = 'white'          # figure / axes background
+    COLOR_SPINE   = '#bbbbbb'        # axis border lines
+    COLOR_GRID_MJ = '#cccccc'        # major gridlines
+    COLOR_GRID_MN = '#e0e0e0'        # minor gridlines
+    COLOR_TICK    = '#444444'        # tick labels
+    COLOR_LABEL   = '#222222'        # axis labels & title
+    COLOR_LEGEND_BG  = 'white'
+    COLOR_LEGEND_EDG = '#bbbbbb'
+    COLOR_LEGEND_TXT = '#222222'
+
+    # Line / fill colours (all neutral)
+    COLOR_MEAN_DIST  = '#111111'     # mean Hamming distance  – solid black
+    COLOR_MIN_DIST   = '#555555'     # min  Hamming distance  – dark gray
+    COLOR_FILL_DIST  = '#aaaaaa'     # std band               – mid gray
+    COLOR_MEAN_ORG   = '#222222'     # mean org size          – near-black
+    COLOR_FILL_ORG   = '#bbbbbb'     # std band               – light gray
+
+    # Environment shading
+    COLOR_ENV_A = '#ffffff'          # Target A → white
+    COLOR_ENV_B = '#e8e8e8'          # Target B → light gray
+
     # ── figure setup ──────────────────────────────────────────────────────────
     standalone = axes is None
     if standalone:
@@ -87,9 +113,8 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
         else:
             fig, ax_top = plt.subplots(1, 1, figsize=(12, 5))
             ax_bot = None
-        fig.patch.set_facecolor('#0f0f14')
+        fig.patch.set_facecolor(COLOR_BG)
     else:
-        # Extract both axes if a sequence was passed, so we can manage visibility
         if isinstance(axes, (tuple, list, np.ndarray)) and len(axes) >= 2:
             ax_top, ax_bot = axes[0], axes[1]
         else:
@@ -103,93 +128,87 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
     else:
         active_axes = [ax_top]
         if ax_bot is not None:
-            ax_bot.set_visible(False)  # <── Hides the blank white plot completely
+            ax_bot.set_visible(False)
 
     for ax in active_axes:
-        ax.set_facecolor('#0f0f14')
+        ax.set_facecolor(COLOR_BG)
         for spine in ax.spines.values():
-            spine.set_edgecolor('#2a2a38')
+            spine.set_edgecolor(COLOR_SPINE)
 
-    # ── environment shading (shared between active panels) ────────────────────
-    COLOR_A = '#2a2a2a'
-    COLOR_B = '#181818'
-
+    # ── environment shading ───────────────────────────────────────────────────
     env_handles = []
     if len(target_ids) == len(t):
         span_start = 0
         for k in range(1, len(t)):
-            changed  = target_ids[k] != target_ids[k - 1]
-            last     = k == len(t) - 1
+            changed = target_ids[k] != target_ids[k - 1]
+            last    = k == len(t) - 1
             if changed or last:
                 span_end = k if changed else k + 1
-                color = COLOR_A if target_ids[span_start] == 'A' else COLOR_B
+                color = COLOR_ENV_A if target_ids[span_start] == 'A' else COLOR_ENV_B
                 for ax in active_axes:
                     ax.axvspan(t[span_start], t[span_end - 1],
                                facecolor=color, alpha=1.0, zorder=0)
                 span_start = k
 
+        # fontname removed from Patch (handled globally now)
         env_handles = [
-            Patch(facecolor=COLOR_A, edgecolor='#3a3a3a', label='Target A'),
-            Patch(facecolor=COLOR_B, edgecolor='#282828', label='Target B'),
+            Patch(facecolor=COLOR_ENV_A, edgecolor=COLOR_SPINE, label='Target A'),
+            Patch(facecolor=COLOR_ENV_B, edgecolor=COLOR_SPINE, label='Target B'),
         ]
 
     # ── top panel: Hamming distance ───────────────────────────────────────────
+    # fontname removed from fill_between and plot
     ax_top.fill_between(t,
                         mean_dist - std_dist,
                         mean_dist + std_dist,
-                        color='#ffa028', alpha=0.15, linewidth=0,
-                        label='mean ± std', zorder=2)
-    ax_top.plot(t, mean_dist, color='#ffa028', linewidth=1.8,
-                label='mean distance', zorder=3)
-    ax_top.plot(t, min_dist,  color='#00d2b4', linewidth=1.8,
-                label='min distance',  zorder=3)
+                        color=COLOR_FILL_DIST, alpha=0.4, linewidth=0,
+                        label='Mean ± STD', zorder=2)
+    ax_top.plot(t, mean_dist, color=COLOR_MEAN_DIST, linewidth=1.8,
+                label='Mean Hamming Distance', zorder=3)
 
     ax_top.set_xlim(t[0], t[-1])
-    ax_top.set_ylim(0, 20)
-    ax_top.yaxis.set_major_locator(ticker.MultipleLocator(5))
-    ax_top.yaxis.set_minor_locator(ticker.MultipleLocator(1))
-    ax_top.grid(which='major', color='#2a2a38', linewidth=0.8, zorder=1)
-    ax_top.grid(which='minor', color='#1e1e28', linewidth=0.4, zorder=1)
-    ax_top.tick_params(colors='#6e7a8a', which='both')
-    ax_top.set_ylabel('Hamming Distance', color='#6e7a8a', fontsize=11)
+    ax_top.yaxis.set_major_locator(ticker.AutoLocator())
+    ax_top.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax_top.grid(which='major', color=COLOR_GRID_MJ, linewidth=0.8, zorder=1)
+    ax_top.grid(which='minor', color=COLOR_GRID_MN, linewidth=0.4, zorder=1)
+    ax_top.tick_params(colors=COLOR_TICK, which='both')
+    ax_top.set_ylabel('Hamming Distance', color=COLOR_LABEL, fontsize=11)
 
-    # If population is hidden, the top panel becomes the bottom-most panel
     if not plot_population:
-        ax_top.set_xlabel('Timestep', color='#6e7a8a', fontsize=11)
+        ax_top.set_xlabel('Timestep', color=COLOR_LABEL, fontsize=11)
 
     plot_title = title or os.path.splitext(os.path.basename(filename))[0]
-    ax_top.set_title(plot_title, color='#d2dce8', fontsize=13, pad=10)
+    ax_top.set_title(plot_title, color=COLOR_LABEL, fontsize=13, pad=10)
 
-    dist_handles, dist_labels = ax_top.get_legend_handles_labels()
+    dist_handles, _ = ax_top.get_legend_handles_labels()
     ax_top.legend(handles=env_handles + dist_handles,
-                  facecolor='#16161f', edgecolor='#2a2a38',
-                  labelcolor='#d2dce8', fontsize=10)
+                  facecolor=COLOR_LEGEND_BG, edgecolor=COLOR_LEGEND_EDG,
+                  labelcolor=COLOR_LEGEND_TXT, fontsize=10)
 
-    # ── bottom panel: population statistics ───────────────────────────────────
+    # ── bottom panel: population statistics (mean ± std only) ─────────────────
     if plot_population and ax_bot is not None:
+        # fontname removed from fill_between and plot
         ax_bot.fill_between(t,
                             mean_org - std_org,
                             mean_org + std_org,
-                            color='#32dc64', alpha=0.15, linewidth=0,
-                            label='mean org size ± std', zorder=2)
-        ax_bot.plot(t, mean_org,   color='#32dc64', linewidth=1.8,
-                    label='mean org size',    zorder=3)
-        ax_bot.plot(t, max_org,    color='#f03264', linewidth=1.4,
-                    linestyle='--', label='max org size', zorder=3)
+                            color=COLOR_FILL_ORG, alpha=0.4, linewidth=0,
+                            label='Mean Org Size ± std', zorder=2)
+        ax_bot.plot(t, mean_org, color=COLOR_MEAN_ORG, linewidth=1.8,
+                    label='Mean Org Size', zorder=3)
 
         ax_bot.set_ylim(bottom=0)
         ax_bot.yaxis.set_major_locator(ticker.AutoLocator())
         ax_bot.yaxis.set_minor_locator(ticker.AutoMinorLocator())
-        ax_bot.grid(which='major', color='#2a2a38', linewidth=0.8, zorder=1)
-        ax_bot.grid(which='minor', color='#1e1e28', linewidth=0.4, zorder=1)
-        ax_bot.tick_params(colors='#6e7a8a', which='both')
-        ax_bot.set_xlabel('Timestep',          color='#6e7a8a', fontsize=11)
-        ax_bot.set_ylabel('Count / Org Size',  color='#6e7a8a', fontsize=11)
+        ax_bot.grid(which='major', color=COLOR_GRID_MJ, linewidth=0.8, zorder=1)
+        ax_bot.grid(which='minor', color=COLOR_GRID_MN, linewidth=0.4, zorder=1)
+        ax_bot.tick_params(colors=COLOR_TICK, which='both')
+        ax_bot.set_xlabel('Timestep', color=COLOR_LABEL, fontsize=11)
+        ax_bot.set_ylabel('Organism Size', color=COLOR_LABEL, fontsize=11)
 
         pop_handles, _ = ax_bot.get_legend_handles_labels()
         ax_bot.legend(handles=pop_handles,
-                      facecolor='#16161f', edgecolor='#2a2a38',
-                      labelcolor='#d2dce8', fontsize=10)
+                      facecolor=COLOR_LEGEND_BG, edgecolor=COLOR_LEGEND_EDG,
+                      labelcolor=COLOR_LEGEND_TXT, fontsize=10)
 
     if standalone:
         fig.tight_layout()
@@ -202,98 +221,150 @@ def plot_runs(filenames: list, titles: list = None):
     """
     Plot multiple experiment files side by side.
     Each column has two stacked subplots (distance on top, population below).
+    Two unified legends are displayed on the far right.
     """
     n = len(filenames)
+    # Extra width added to figsize (e.g., + 2.5) to accommodate the right-side legends
     fig, axes = plt.subplots(
-        2, n, figsize=(12 * n, 8), sharex='col',
+        2, n, figsize=(5 * n + 2.5, 7), sharex='col',
         gridspec_kw={'height_ratios': [1.2, 1]}
     )
-    fig.patch.set_facecolor('#0f0f14')
 
     # Normalise axes shape for n==1
     if n == 1:
-        axes = axes.reshape(2, 1)
+        axes = np.array([[axes[0]], [axes[1]]])
 
     for k, fname in enumerate(filenames):
         title = (titles[k] if titles and k < len(titles)
                  else os.path.splitext(os.path.basename(fname))[0])
+
+        title = "Run "+ str(int(title.split(".")[1]) + 1)
+        # Plot each run
         plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
 
-    fig.tight_layout()
-    plt.show()
-    return fig, axes
+        # Remove individual subplots' internal legends
+        if axes[0, k].get_legend():
+            axes[0, k].get_legend().remove()
+        if axes[1, k].get_legend():
+            axes[1, k].get_legend().remove()
 
+    # ── Gather distinct handles from the first column ────────────────────────
+    top_handles, top_labels = axes[0, 0].get_legend_handles_labels()
+    bot_handles, bot_labels = axes[1, 0].get_legend_handles_labels()
+
+    # ── Render Top Right Legend (Fitness & Environment) ──────────────────────
+    leg_top = fig.legend(
+        handles=top_handles,
+        labels=top_labels,
+        loc='upper left',
+        bbox_to_anchor=(0.84, 0.88),  # Positioned to the right of the top row
+        facecolor='white',
+        edgecolor='#bbbbbb',
+        fontsize=10,
+        title="Hamming Distance & Environment",
+        title_fontsize=11
+    )
+    leg_top._legend_box.align = "left"
+
+    # ── Render Bottom Right Legend (Organism Size) ───────────────────────────
+    leg_bot = fig.legend(
+        handles=bot_handles,
+        labels=bot_labels,
+        loc='upper left',
+        bbox_to_anchor=(0.84, 0.45),  # Positioned to the right of the bottom row
+        facecolor='white',
+        edgecolor='#bbbbbb',
+        fontsize=10,
+        title="Organism Size",
+        title_fontsize=11
+    )
+    leg_bot._legend_box.align = "left"
+
+    # Use rect parameter to leave the right 16% of the canvas open for legends
+    fig.tight_layout(rect=[0.05, 0, 0.83, 1])
+    plt.show()
+
+    return fig, axes
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SIMULATION RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_experiment(args):
-    """Worker function. Receives (run_index, params_dict)."""
-    i, params = args
-    buffer = []
+def plot_runs(filenames: list, titles: list = None):
+    """
+    Plot multiple experiment files side by side.
+    Each column has two stacked subplots (distance on top, population below).
+    Y-axis labels are only shown on the leftmost subplots.
+    Two unified legends are displayed on the far right.
+    """
+    n = len(filenames)
+    # Extra width added to figsize to accommodate the right-side legends
+    fig, axes = plt.subplots(
+        2, n, figsize=(5 * n + 2.5, 7), sharex='col',
+        gridspec_kw={'height_ratios': [1.2, 1]}
+    )
 
-    os.makedirs(DATA_DIR, exist_ok=True)
+    # Normalise axes shape for n==1
+    if n == 1:
+        axes = np.array([[axes[0]], [axes[1]]])
 
-    # Build the folder name from params, not MODEL_PARAMS
-    folder = (f"fp{params['fitness_power']}_"
-              f"mi{params['min_fitness']}_"
-              f"ma{params['max_fitness']}_"
-              f"mu{params['mutation_factor']}_"
-              f"xs{params['x_size']}_"
-              f"ys{params['y_size']}_"
-              f"mr{params['mean_resource']}_"
-              f"sd{params['sd_recourse']}_"
-              f"rr{params['regen_rate']}_"
-              f"th{params['division_thres']}_"
-              f"ti{params['division_timesteps']}")
+    for k, fname in enumerate(filenames):
+        title = (titles[k] if titles and k < len(titles)
+                 else os.path.splitext(os.path.basename(fname))[0])
 
-    out_path = f"{DATA_DIR}/{folder}/{EXPERIMENT_ID}.{i}.txt"
-    os.makedirs(f"{DATA_DIR}/{folder}", exist_ok=True)
+        title = "Run " + str(int(title.split(".")[1]) + 1)
 
-    model = Model(**params)
-    start = time.time()
+        # Plot each run
+        plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
 
-    with open(out_path, 'w') as file:
-        for t in range(MAX_TIMESTEPS):
-            if t % LOG_INTERVAL == 0:
-                elapsed = time.time() - start
-                print(f"Run {i}: {t}/{MAX_TIMESTEPS}  ({elapsed:.1f}s)")
-                start = time.time()
+        # Hide y-axis labels for all columns except the first one
+        if k > 0:
+            axes[0, k].set_ylabel('')
+            axes[1, k].set_ylabel('')
 
-            if random() < LAMBDA:
-                model.SwitchTarget()
+        # Remove individual subplots' internal legends
+        if axes[0, k].get_legend():
+            axes[0, k].get_legend().remove()
+        if axes[1, k].get_legend():
+            axes[1, k].get_legend().remove()
 
-            model.ExecuteStep()
+    # ── Gather distinct handles from the first column ────────────────────────
+    top_handles, top_labels = axes[0, 0].get_legend_handles_labels()
+    bot_handles, bot_labels = axes[1, 0].get_legend_handles_labels()
 
-            buffer.append(
-                f"{t}\t"
-                f"{model.TotalPopulation}\t"
-                f"{model.MinimalDistance}\t"
-                f"{model.MeanDistance:.3f}\t"
-                f"{model.STDDistance:.3f}\t"
-                f"{model.MeanOrgSize:.3f}\t"
-                f"{model.MaxOrgSize}\t"
-                f"{model.STDOrgSize:.3f}\t"
-                f"{model.TargetID}\n"
-            )
+    # ── Render Top Right Legend (Fitness & Environment) ──────────────────────
+    leg_top = fig.legend(
+        handles=top_handles,
+        labels=top_labels,
+        loc='upper left',
+        bbox_to_anchor=(0.84, 0.88),  # Positioned to the right of the top row
+        facecolor='white',
+        edgecolor='#bbbbbb',
+        fontsize=10,
+        title="Fitness",
+        title_fontsize=11
+    )
+    leg_top._legend_box.align = "left"
 
-            if len(buffer) >= WRITE_INTERVAL:
-                file.writelines(buffer)
-                buffer.clear()
+    # ── Render Bottom Right Legend (Organism Size) ───────────────────────────
+    leg_bot = fig.legend(
+        handles=bot_handles,
+        labels=bot_labels,
+        loc='upper left',
+        bbox_to_anchor=(0.84, 0.45),  # Positioned to the right of the bottom row
+        facecolor='white',
+        edgecolor='#bbbbbb',
+        fontsize=10,
+        title="Organism Size",
+        title_fontsize=11
+    )
+    leg_bot._legend_box.align = "left"
 
-            if model.TotalPopulation == 0:
-                print(f"Run {i}: population extinct at t={t}.")
-                break
-        file.writelines(buffer)
+    # Compress subplots to the left 83% of the window so they don't hit the legends
+    fig.tight_layout(rect=[0.05, 0, 0.83, 1])
+    plt.show()
 
-    os.makedirs(f"{DATA_DIR}/{folder}/cells", exist_ok=True)
-    cells = model.Cells
-    for i,c in enumerate(cells):
-        c.UniCellular = True
-        c.ToJSON(f"{DATA_DIR}/{folder}/cells/{i}.{c.ID}")
-
-    print(f"Run {i} complete → {out_path}")
+    return fig, axes
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -306,7 +377,7 @@ if __name__ == '__main__':
 
     # Model parameters — passed to every run
     MODEL_PARAMS = dict(
-        fitness_power=3,
+        fitness_power=1,
         min_fitness=0.001,
         max_fitness=0.2,
         mutation_factor=25,
@@ -331,7 +402,7 @@ if __name__ == '__main__':
               f"th{MODEL_PARAMS["division_thres"]}_"
               f"ti{MODEL_PARAMS["division_timesteps"]}")
 
-    #── run ───────────────────────────────────────────────────────────────────
+    # #── run ───────────────────────────────────────────────────────────────────
     # args = [(i, MODEL_PARAMS) for i in range(AMOUNT_OF_RUNS)]
     #
     # start = time.time()
@@ -340,7 +411,7 @@ if __name__ == '__main__':
     # print(f"All runs finished in {time.time() - start:.1f}s")
 
     # ── plot ──────────────────────────────────────────────────────────────────
-    files = [f"{DATA_DIR}/{folder}/{EXPERIMENT_ID}.{i}.txt" for i in range(AMOUNT_OF_RUNS)]
+    files = [(f"Data/{folder}/{EXPERIMENT_ID}.{i}.txt") for i in range(AMOUNT_OF_RUNS)]
 
     # Single run
     # plot_run(files[4])

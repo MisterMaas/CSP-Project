@@ -1,0 +1,326 @@
+from __future__ import annotations
+import numpy as np
+import numpy.random as random
+from typing import TYPE_CHECKING
+import math
+import json
+if TYPE_CHECKING:
+    from GRNModel import Model
+
+class Cell:
+    """"
+    GRN Parameters
+    """
+    # Represents how many unique genes
+    # aka. how many gene id's there are.
+    AmountOfTypes : int
+
+    # Int that represents the number of different
+    # gene types
+    NumberOfGenes : int
+
+    # Boolean that keeps track of weather a cell is
+    # stable. This is added for optimalisation
+    IsStable : bool
+
+    Model : Model
+
+    # Fitness that is caculated depending on
+    # the hamming distance
+    HammingDistance : int
+    Fitness : float
+
+    # Genome is a 4xn matrix, where:
+    # Row 1 represents the gene ID
+    # Row 2 represents the gene Threshold
+    # Row 3 represents the gene's last expression
+    # Row 4 represents the gene's current expression
+    # n is the number of genes in the genome
+    Genome: np.array
+
+    # ExpressionPattern is a 1x20 matrix, where:
+    # Each index is 1 when one of the corresponding
+    # gene's is active, otherwise it's 0.
+    ExpressionPattern: np.array
+
+    # GRN is a nxn matrix, where:
+    # Element a_ij is 0 when there is no edge from j to i
+    # Element a_ij is 1 when j has an activating effect on i
+    # Element a_ij is -1 when j has an inhibiting effect on i
+    GRN: np.array
+
+    """"
+    Moving parameters
+    """
+
+    # We keep a boolean that keeps track of wether a
+    # cell is part of a larger organism. We do this
+    # via a boolean. All cells are initially
+    # unicellular
+    UniCellular = True
+
+    # We want to keep track of the initial position of the cell
+    iPos : int
+    jPos : int
+
+
+    # We further want to be able to distinghuish the different
+    # cells
+    ID : int
+
+    """"
+    Devision
+    """
+    # We keep track of the current resource level
+    # this is 10 on initialisation
+    CRL = 10.0
+
+    # When a cell is in division, it takes some amount of
+    # time. Therefore we have to check how far it
+    # is in the devision process. All cells
+    # are initialized with division steps equal to 0
+    Division_Steps = 0
+
+    def __init__(self, model, number_of_genes = 20):
+        def InitiateGenome(number_of_genes):
+            """
+            Initiates the "pearl string" genome
+            """
+            # First we create a array from 1 to the number
+            # of genes, representing the ID of the gene types.
+            identification = np.arange(number_of_genes, dtype=int) + 1
+            # The last expressions are just zeros on initiation
+            last_expression = np.zeros(number_of_genes, dtype=int)
+            # Then we create a random expression pattern
+            # We also save this expression pattern to
+            # the expression pattern
+            expression = np.zeros(number_of_genes)
+            self.ExpressionPattern = np.zeros(number_of_genes, dtype=int)
+            # We do the same for the thresholds
+            threshold = np.zeros(number_of_genes, dtype=int)
+            for i in identification:
+                exp = random.choice([0, 1])
+                expression[i - 1] = exp
+                self.ExpressionPattern[i - 1] = exp
+                threshold[i-1] = random.choice([-2,-1,0,1,2])
+            # We stack the identification and expression arrays
+            # to get the intended matrix. Note that the last
+            # expressions are the same as the current
+            self.Genome = np.vstack((identification, threshold, last_expression, expression))
+
+        def InitiateGRN(number_of_gens):
+            """"
+            Initiates the GRN as a nxn matrix
+            """
+            # First we initiate a nxn matrix containing
+            # only zero values. We do the same for the
+            # threshold map. We use a sparse matrix (containing
+            # only few non-zero elements) for optimization.
+            self.GRN = self.GRN = np.zeros((number_of_genes, number_of_genes), dtype=np.int8)
+
+            # We then go over all the n genes in the genome.
+            for i in range(number_of_genes):
+                # We create a range from 0 to one, representing
+                # the possible genes that the gene can regulate
+                possible_edges = np.arange(number_of_genes)
+
+                # The paper specified that, on initiation,
+                # the GRN does not have an edge to itself,
+                # nor have any parallel edges. We therefore
+                # remove the gene itself and all genes that
+                # already have an edge to the current gene
+                # from the possible edges
+                possible_edges = np.delete(possible_edges, i)
+                for n, edges in enumerate(self.GRN[:, i]):
+                    if edges != 0:
+                        possible_edges = possible_edges[possible_edges != n]
+                        if possible_edges.size <= 1:
+                            return False
+
+                # We then take a random number between 1 and 20.
+                # This will represent the amount of binding sites
+                # the GRN has after initiation.
+                amount_of_binding_sites = random.binomial(len(possible_edges), (1 / len(possible_edges))) + 1
+                # Then we make amount_of_binding_sites random choices
+                # about where a gene connects to
+                for m in range(amount_of_binding_sites):
+                    j = random.choice(possible_edges)
+                    # The selected index now means that there
+                    # is an edge from gene j to gene i. We then
+                    # randomly select wether this binding is
+                    # activating or inhibiting (-1, 1)
+                    self.GRN[j,i] = random.choice([-1, 1])
+                    # Gene j is removed from the possible edges
+                    possible_edges = np.delete(possible_edges, np.where(possible_edges == j))
+            return True
+
+        self.Model = model
+        self.IsStable = False
+        self.Fitness = 0
+        self.HammingDistance = number_of_genes
+        self.NumberOfGenes = number_of_genes
+        self.AmountOfTypes = number_of_genes
+        InitiateGenome(number_of_genes)
+
+        succes = False
+
+        while not succes:
+            succes = InitiateGRN(number_of_genes)
+
+    @classmethod
+    def CopyCell(cls, parent, i_pos, j_pos, id):
+        new_cell = cls.__new__(cls)
+        new_cell.Model = parent.Model
+        new_cell.NumberOfGenes = parent.NumberOfGenes
+        new_cell.HammingDistance = parent.HammingDistance
+        new_cell.IsStable = parent.IsStable
+        new_cell.Fitness = parent.Fitness
+        new_cell.Genome = np.copy(parent.Genome)
+        new_cell.ExpressionPattern = np.copy(parent.ExpressionPattern)
+        new_cell.GRN = np.copy(parent.GRN)
+        new_cell.iPos = i_pos
+        new_cell.jPos = j_pos
+        new_cell.AmountOfTypes = parent.AmountOfTypes
+        new_cell.ID = id
+        return new_cell
+
+    @classmethod
+    def FromJSON(cls, model, filepath):
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        cell = cls.__new__(cls)
+        cell.Model = model
+        cell.ID = data["ID"]
+        cell.iPos = data["iPos"]
+        cell.jPos = data["jPos"]
+        cell.NumberOfGenes = data["NumberOfGenes"]
+        cell.AmountOfTypes = data["AmountOfTypes"]
+        cell.IsStable = data["IsStable"]
+        cell.UniCellular = data["UniCellular"]
+        cell.CRL = data["CRL"]
+        cell.Division_Steps = data["Division_Steps"]
+        cell.HammingDistance = data["HammingDistance"]
+        cell.Fitness = data["Fitness"]
+        cell.Genome = np.array(data["Genome"], dtype=int)
+        cell.ExpressionPattern = np.array(data["ExpressionPattern"], dtype=int)
+        cell.GRN = np.array(data["GRN"], dtype=np.int8)
+        return cell
+
+    def ExecutePropagation(self, propagation_steps = 11):
+
+        def UpdateGenome():
+            # First we set the last genome expression
+            # to be the current
+            self.Genome[2] = self.Genome[3]
+            # Then we update the current expression
+            # using the last expression.
+            update_values = self.Genome[2] @ self.GRN
+            # We take the threshold values
+            thres = self.Genome[1]
+            # And update the genome using vectorisation logic
+            new_expr = np.where(update_values > thres, 1,
+                                np.where(update_values == thres, self.Genome[2], 0))
+            # We set this to the new expression of the
+            # gene
+            self.Genome[3] = new_expr
+
+        def UpdateExpressionPattern():
+            # We go over all the genes in the genome
+            # and check their expression. If a gene
+            # of one type is active in the genome,
+            # it will be active int the expression patern.
+            # Otherwise it will be 0.
+            target_length = len(self.Model.Target)
+            # We initialize the exprission pattern as a vector
+            # only containing zeros
+            self.ExpressionPattern = np.zeros(target_length)
+            # We make a vector containing all active genes
+            active_ids = self.Genome[0, self.Genome[3] == 1].astype(int) - 1
+            # We transform this into a boolean array which says wether
+            # index is valid
+            valid = active_ids[(active_ids >= 0) & (active_ids < target_length)]
+            # For all these valid expressions we fill in a 1
+            self.ExpressionPattern[valid] = 1
+            # We return false if there are no valid expressions
+            return valid.size > 0
+
+        # We do not preform propagation when the
+        # cell is stable:
+        if self.IsStable: return True
+
+        # We perform the propagation steps
+        for i in range(propagation_steps):
+            # We first update the genome
+            UpdateGenome()
+            # UpdateExpressionPattern returns True if the
+            # cell has died
+            if not UpdateExpressionPattern():
+                # If a cell has died, we return false
+                return False
+            # When the last expression pattern
+            # and the current expression pattern are the
+            # same, the GRN is stable and we exit the loop
+            if np.array_equal(self.Genome[2], self.Genome[3]):
+                self.IsStable = True
+                break
+
+        # After performing all the propagation steps, we can
+        # update the fitness
+        self.UpdateFitness()
+        self.IsStable = True
+        # If a cell is alive the function returns True
+        return True
+
+    def UpdateFitness(self):
+        # First we have to calculate the hamming distance
+        self.HammingDistance = np.sum(self.ExpressionPattern != self.Model.Target)
+        max_possible_distance = len(self.Model.Target)
+        # We apply the fitness function
+        fitness = (1 - (self.HammingDistance / max_possible_distance)) ** self.Model.FitnessPower
+        # We then apply a fitness "squeeze", because
+        # we always want some change of adhesion and never want 100 precent
+        # cance of adhesion
+        self.Fitness = fitness * (self.Model.MaxFitness - self.Model.MinFitness) + self.Model.MinFitness
+
+    def Mutate(self, mutation_factor=1,
+               p_g_dup=2e-4, p_g_del=3e-4,
+               p_thres=5e-6, p_b_dup=2e-5,
+               p_b_del=3e-5, p_innov=1e-5,
+               p_wei_c=2e-5, p_per_c=2e-5,
+               del_per=3e-5, dup_per=2e-5):
+
+        # Change fitness by random value between -0.1 and 0.1
+        if random.random() < 1e-2:
+            mutation = (random.random() * 0.2 - 0.1)
+            max_lock = np.min([self.Model.MaxFitness, self.Fitness + mutation])
+            min_lock = np.max([self.Model.MinFitness, max_lock])
+            self.Fitness = min_lock
+        return True
+
+    def propose_move(self, directions):
+        di, dj = directions
+        return (self.iPos + di) % self.Model.xSize, (self.jPos + dj) % self.Model.ySize
+
+    def ToJSON(self, filepath):
+        data = {
+            "ID": int(self.ID),
+            "iPos": int(self.iPos),
+            "jPos": int(self.jPos),
+            "NumberOfGenes": int(self.NumberOfGenes),
+            "AmountOfTypes": int(self.AmountOfTypes),
+            "IsStable": bool(self.IsStable),
+            "UniCellular": bool(self.UniCellular),
+            "CRL": float(self.CRL),
+            "Division_Steps": int(self.Division_Steps),
+            "HammingDistance": int(self.HammingDistance),
+            "Fitness": float(self.Fitness),
+            "Genome": self.Genome.tolist(),
+            "ExpressionPattern": self.ExpressionPattern.tolist(),
+            "GRN": self.GRN.tolist(),
+        }
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=2)
+
+
+
