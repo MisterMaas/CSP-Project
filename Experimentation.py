@@ -17,7 +17,7 @@ from multiprocessing import Pool
 EXPERIMENT_ID   = 1
 AMOUNT_OF_RUNS  = 5           # number of parallel runs
 MAX_TIMESTEPS   = 50_000       # steps per run
-LAMBDA          = 0      # probability of target switch per step
+LAMBDA          = 3e-4      # probability of target switch per step
 WRITE_INTERVAL  = 1_000       # how often to flush buffer to disk
 LOG_INTERVAL    = 10_000      # how often to print progress
 
@@ -45,7 +45,7 @@ DATA_DIR = "Data"
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman']
 
-def plot_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 1):
+def plot_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 100, show_bg_shading: bool = True):
     """
     Plot a single experiment file with stacked subplots.
       - Top:    Hamming distance statistics (min, mean ± std)
@@ -137,11 +137,11 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
 
     # ── environment shading ───────────────────────────────────────────────────
     env_handles = []
-    if len(target_ids) == len(t):
+    if show_bg_shading and len(target_ids) == len(t):  # <-- ADDED 'show_bg_shading and'
         span_start = 0
         for k in range(1, len(t)):
             changed = target_ids[k] != target_ids[k - 1]
-            last    = k == len(t) - 1
+            last = k == len(t) - 1
             if changed or last:
                 span_end = k if changed else k + 1
                 color = COLOR_ENV_A if target_ids[span_start] == 'A' else COLOR_ENV_B
@@ -150,12 +150,10 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
                                facecolor=color, alpha=1.0, zorder=0)
                 span_start = k
 
-        # fontname removed from Patch (handled globally now)
         env_handles = [
             Patch(facecolor=COLOR_ENV_A, edgecolor=COLOR_SPINE, label='Target A'),
             Patch(facecolor=COLOR_ENV_B, edgecolor=COLOR_SPINE, label='Target B'),
         ]
-
     # ── top panel: Hamming distance ───────────────────────────────────────────
     # fontname removed from fill_between and plot
     ax_top.fill_between(t,
@@ -482,68 +480,138 @@ def run_experiment(args):
 #  SIMULATION RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def plot_runs(filenames: list, titles: list = None):
+def plot_runs(filenames: list, titles: list = None, plot_ignore: int = 1000):
     """
     Plot multiple experiment files side by side.
-    Each column has two stacked subplots (distance on top, population below).
+    Each column has three stacked subplots:
+      - Top: Hamming distance
+      - Middle: Environment track (Target A vs Target B with patterns)
+      - Bottom: Organism size
     Y-axis labels are only shown on the leftmost subplots.
     Two unified legends are displayed on the far right.
     """
     n = len(filenames)
     # Extra width added to figsize to accommodate the right-side legends
     fig, axes = plt.subplots(
-        2, n, figsize=(5 * n + 2.5, 7), sharex='col',
-        gridspec_kw={'height_ratios': [1.2, 1]}
+        3, n, figsize=(5 * n + 2.5, 8.5), sharex='col',
+        gridspec_kw={'height_ratios': [1.2, 0.15, 1]}
     )
 
     # Normalise axes shape for n==1
     if n == 1:
-        axes = np.array([[axes[0]], [axes[1]]])
+        axes = np.array([[axes[0]], [axes[1]], [axes[2]]])
 
     for k, fname in enumerate(filenames):
         title = (titles[k] if titles and k < len(titles)
                  else os.path.splitext(os.path.basename(fname))[0])
-
         title = "Run " + str(int(title.split(".")[1]) + 1)
 
-        # Plot each run
-        plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
+        # 1. Plot top and bottom panels using the existing plot_run function
+        # We pass the 1st and 3rd rows as the axes pair
+        plot_run(fname, axes=(axes[0, k], axes[2, k]), title=title, plot_ignore=plot_ignore, show_bg_shading=False)
 
-        # Hide y-axis labels for all columns except the first one
+        # 2. Parse file specifically for the middle environment track
+        t = []
+        target_ids = []
+        with open(fname, 'r') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 9 and float(parts[0]) % plot_ignore == 0:
+                    t.append(float(parts[0]))
+                    target_ids.append(parts[8])
+
+        # 3. Draw the environment track in the middle row (axes[1, k])
+        ax_mid = axes[1, k]
+        ax_mid.set_facecolor('white')
+        ax_mid.set_ylim(0, 1)
+        ax_mid.set_xlim(t[0], t[-1])
+        # Hide y ticks and labels for the environment row
+        ax_mid.set_yticks([])
+        ax_mid.set_ylabel('', visible=False)
+
+        # Style spines to match your B&W clean palette
+        for spine in ax_mid.spines.values():
+            spine.set_edgecolor('#bbbbbb')
+
+        if len(target_ids) == len(t):
+            span_start = 0
+            for i in range(1, len(t)):
+                changed = target_ids[i] != target_ids[i - 1]
+                last = i == len(t) - 1
+                if changed or last:
+                    span_end = i if changed else i + 1
+
+                    is_A = target_ids[span_start] == 'A'
+                    bg_color = 'white' if is_A else '#e8e8e8'
+                    hatch_pat = '////' if is_A else '...'
+
+                    ax_mid.axvspan(t[span_start], t[span_end - 1],
+                                   facecolor=bg_color, hatch=hatch_pat,
+                                   edgecolor='#999999', alpha=1.0)
+                    span_start = i
+
+        # Hide y-axis labels for all columns except the first one on main plots
         if k > 0:
             axes[0, k].set_ylabel('')
-            axes[1, k].set_ylabel('')
+            axes[2, k].set_ylabel('')
 
         # Remove individual subplots' internal legends
         if axes[0, k].get_legend():
             axes[0, k].get_legend().remove()
-        if axes[1, k].get_legend():
-            axes[1, k].get_legend().remove()
+        if axes[2, k].get_legend():
+            axes[2, k].get_legend().remove()
+
+    # Create explicit legend handles for the patterned environment tracks
+    env_handles = [
+        Patch(facecolor='white', hatch='////', edgecolor='#bbbbbb', label='Target A'),
+        Patch(facecolor='#e8e8e8', hatch='...', edgecolor='#999999', label='Target B'),
+    ]
 
     # ── Gather distinct handles from the first column ────────────────────────
+    # ── Gather distinct handles from the first column ────────────────────────
     top_handles, top_labels = axes[0, 0].get_legend_handles_labels()
-    bot_handles, bot_labels = axes[1, 0].get_legend_handles_labels()
+    bot_handles, bot_labels = axes[2, 0].get_legend_handles_labels()
 
-    # ── Render Top Right Legend (Fitness & Environment) ──────────────────────
+    # Create explicit legend handles for the patterned environment tracks
+    env_handles = [
+        Patch(facecolor='white', hatch='////', edgecolor='#bbbbbb', label='Target A'),
+        Patch(facecolor='#e8e8e8', hatch='...', edgecolor='#999999', label='Target B'),
+    ]
+
+    # ── Render Top Right Legend (Fitness / Hamming Distance) ─────────────────
     leg_top = fig.legend(
-        handles=top_handles,
-        labels=top_labels,
+        handles=top_handles,  # Only pass the metric line/fill handles
+        labels=top_labels,  # No slicing needed; captures Mean, STD, Min perfectly
         loc='upper left',
-        bbox_to_anchor=(0.84, 0.88),  # Positioned to the right of the top row
+        bbox_to_anchor=(0.84, 0.88),
         facecolor='white',
         edgecolor='#bbbbbb',
         fontsize=10,
-        title="Hamming Distance & Environment",
+        title="Hamming Distance",
         title_fontsize=11
     )
     leg_top._legend_box.align = "left"
+
+    # ── Render Middle Right Legend (Target Environment) ──────────────────────
+    leg_mid = fig.legend(
+        handles=env_handles,  # Only pass the target patches
+        labels=['Target A', 'Target B'],
+        loc='upper left',
+        bbox_to_anchor=(0.84, 0.55),  # Slightly adjusted height for spacing
+        facecolor='white',
+        edgecolor='#bbbbbb',
+        fontsize=10,
+        title="Target",
+        title_fontsize=11
+    )
+    leg_mid._legend_box.align = "left"
 
     # ── Render Bottom Right Legend (Organism Size) ───────────────────────────
     leg_bot = fig.legend(
         handles=bot_handles,
         labels=bot_labels,
         loc='upper left',
-        bbox_to_anchor=(0.84, 0.45),  # Positioned to the right of the bottom row
+        bbox_to_anchor=(0.84, 0.25),
         facecolor='white',
         edgecolor='#bbbbbb',
         fontsize=10,
@@ -558,7 +626,6 @@ def plot_runs(filenames: list, titles: list = None):
 
     return fig, axes
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT — only touch things below this line
 # ══════════════════════════════════════════════════════════════════════════════
@@ -569,12 +636,12 @@ if __name__ == '__main__':
 
     # Model parameters — passed to every run
     MODEL_PARAMS = dict(
-        fitness_power=1,
-        min_fitness=0.001,
+        fitness_power=3,
+        min_fitness=0.005,
         max_fitness=0.2,
-        mutation_factor=25,
-        x_size=25,
-        y_size=25,
+        mutation_factor=100,
+        x_size=50,
+        y_size=50,
         mean_resource=1.0,
         sd_recourse=5.0,
         regen_rate=0.05,
