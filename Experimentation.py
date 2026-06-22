@@ -16,7 +16,7 @@ from multiprocessing import Pool
 
 EXPERIMENT_ID   = 1
 AMOUNT_OF_RUNS  = 5           # number of parallel runs
-MAX_TIMESTEPS   = 500_000       # steps per run
+MAX_TIMESTEPS   = 50_000       # steps per run
 LAMBDA          = 0      # probability of target switch per step
 WRITE_INTERVAL  = 1_000       # how often to flush buffer to disk
 LOG_INTERVAL    = 10_000      # how often to print progress
@@ -165,6 +165,8 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
                         label='Mean ± STD', zorder=2)
     ax_top.plot(t, mean_dist, color=COLOR_MEAN_DIST, linewidth=1.8,
                 label='Mean Hamming Distance', zorder=3)
+    ax_top.plot(t, min_dist, color=COLOR_MEAN_DIST, linewidth=1.8,
+                label='Minimum Hamming Distance', linestyle = "--", zorder=3)
 
     ax_top.set_xlim(t[0], t[-1])
     ax_top.yaxis.set_major_locator(ticker.AutoLocator())
@@ -410,6 +412,72 @@ def plot_GRN_run(filename: str, axes=None, title: str = None, plot_population: b
 
     return fig, (ax_top, ax_bot)
 
+def run_experiment(args):
+    """Worker function. Receives (run_index, params_dict)."""
+    i, params = args
+    buffer = []
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # Build the folder name from params, not MODEL_PARAMS
+    folder = (f"fp{params['fitness_power']}_"
+              f"mi{params['min_fitness']}_"
+              f"ma{params['max_fitness']}_"
+              f"mu{params['mutation_factor']}_"
+              f"xs{params['x_size']}_"
+              f"ys{params['y_size']}_"
+              f"mr{params['mean_resource']}_"
+              f"sd{params['sd_recourse']}_"
+              f"rr{params['regen_rate']}_"
+              f"th{params['division_thres']}_"
+              f"ti{params['division_timesteps']}")
+
+    out_path = f"{DATA_DIR}/{folder}/{EXPERIMENT_ID}.{i}.txt"
+    os.makedirs(f"{DATA_DIR}/{folder}", exist_ok=True)
+
+    model = Model(**params)
+    start = time.time()
+
+    with open(out_path, 'w') as file:
+        for t in range(MAX_TIMESTEPS):
+            if t % LOG_INTERVAL == 0:
+                elapsed = time.time() - start
+                print(f"Run {i}: {t}/{MAX_TIMESTEPS}  ({elapsed:.1f}s)")
+                start = time.time()
+
+            if random() < LAMBDA:
+                model.SwitchTarget()
+
+            model.ExecuteStep()
+            buffer.append(
+                f"{t}\t"
+                f"{model.TotalPopulation}\t"
+                f"{model.MinimalDistance:.3f}\t"
+                f"{model.MeanDistance:.3f}\t"
+                f"{model.STDDistance:.3f}\t"
+                f"{model.MeanOrgSize:.3f}\t"
+                f"{model.MaxOrgSize}\t"
+                f"{model.STDOrgSize:.3f}\t"
+                f"{model.TargetID}\n"
+            )
+
+            if len(buffer) >= WRITE_INTERVAL:
+                file.writelines(buffer)
+                buffer.clear()
+
+            if model.TotalPopulation == 0:
+                print(f"Run {i}: population extinct at t={t}.")
+                break
+        file.writelines(buffer)
+
+    os.makedirs(f"{DATA_DIR}/{folder}/cells", exist_ok=True)
+    cells = model.Cells
+    for i,c in enumerate(cells):
+        c.UniCellular = True
+        c.ToJSON(f"{DATA_DIR}/{folder}/cells/{i}.{c.ID}")
+
+    print(f"Run {i} complete → {out_path}")
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  SIMULATION RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
@@ -505,8 +573,8 @@ if __name__ == '__main__':
         min_fitness=0.001,
         max_fitness=0.2,
         mutation_factor=25,
-        x_size=50,
-        y_size=50,
+        x_size=25,
+        y_size=25,
         mean_resource=1.0,
         sd_recourse=5.0,
         regen_rate=0.05,

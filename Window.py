@@ -447,7 +447,7 @@ class Window:
         """"
         TODO: this is temporarily 1, must become 20
         """
-        max_val = 1
+        max_val = 20
 
         pygame.draw.line(surf, DIVIDER, (pad, pad), (pad, pad + gh))
         pygame.draw.line(surf, DIVIDER, (pad, pad + gh), (pad + gw, pad + gh))

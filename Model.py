@@ -1,7 +1,7 @@
 import numpy.random as random
 import numpy as np
 from FyeldGenerator import generate_field
-from CellStick import Cell
+from Cell import Cell
 from Organism import Organism
 
 class Model:
@@ -134,9 +134,6 @@ class Model:
                     if random.rand() < initial_pop_density:
                         cell = Cell.CopyCell(parent, i, j, self.TypeOffCells)
                         cell.CRL = 10
-                        """"
-                        TODO: fitness moet niet 0
-                        """
                         cell.Fitness = 0
                         self.TypeOffCells += 1
                         org = Organism(self, cell, (i, j))
@@ -288,11 +285,11 @@ class Model:
             """"
             TO DO: changed to fitness only for sticky info
             """
-            distances = np.array([cell.Fitness for cell in self.Cells])
+            distances = np.array([cell.HammingDistance for cell in self.Cells])
             self.TotalPopulation = len(distances)
             self.MeanDistance = np.mean(distances)
             self.STDDistance = np.std(distances)
-            self.MinimalDistance = np.max(distances)
+            self.MinimalDistance = np.min(distances)
         else:
             self.TotalPopulation = 0
             self.MeanDistance = 0
