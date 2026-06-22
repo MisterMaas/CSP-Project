@@ -439,7 +439,7 @@ def plot_runs(filenames: list, titles: list = None):
         title = "Run " + str(int(title.split(".")[1]) + 1)
 
         # Plot each run
-        plot_GRN_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
+        plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
 
         # Hide y-axis labels for all columns except the first one
         if k > 0:
@@ -535,10 +535,10 @@ if __name__ == '__main__':
     # print(f"All runs finished in {time.time() - start:.1f}s")
 
     # ── plot ──────────────────────────────────────────────────────────────────
-    files = [(f"GRN-data/Data-8.{i}.txt") for i in range(AMOUNT_OF_RUNS)]
+    files = [(f"Data/{folder}/{1}.{i}.txt") for i in range(AMOUNT_OF_RUNS)]
 
     # Single run
-    plot_GRN_run(files[1], title = "From t=5e5 to t=6e5.",plot_population=False, xlim=[500_000, 600_000])
+    # plot_run(files[1])
 
-    # All runs side by side (comment out if you only want one)
-    # plot_runs(files)
+    # # All runs side by side (comment out if you only want one)
+    plot_runs(files)
