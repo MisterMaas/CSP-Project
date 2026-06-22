@@ -45,7 +45,7 @@ DATA_DIR = "Data"
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman']
 
-def plot_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 100):
+def plot_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 1):
     """
     Plot a single experiment file with stacked subplots.
       - Top:    Hamming distance statistics (min, mean ± std)
@@ -217,74 +217,198 @@ def plot_run(filename: str, axes=None, title: str = None, plot_population: bool 
     return fig, (ax_top, ax_bot)
 
 
-def plot_runs(filenames: list, titles: list = None):
+def plot_GRN_run(filename: str, axes=None, title: str = None, plot_population: bool = True, plot_ignore: int = 1,
+                 xlim: tuple = None, ymax: float = 7):
     """
-    Plot multiple experiment files side by side.
-    Each column has two stacked subplots (distance on top, population below).
-    Two unified legends are displayed on the far right.
+    Plot a single GRN experiment file with stacked subplots.
+      - Environment shifts marked by striped vertical lines.
+      - Environment background color shown only between y=0 and y=-1.
+      - Minimum Hamming distance added as a black dashed line.
+      - Custom ymax parameter added to clamp the upper y-limit on the top plot.
     """
-    n = len(filenames)
-    # Extra width added to figsize (e.g., + 2.5) to accommodate the right-side legends
-    fig, axes = plt.subplots(
-        2, n, figsize=(5 * n + 2.5, 7), sharex='col',
-        gridspec_kw={'height_ratios': [1.2, 1]}
-    )
+    # ── parse file ────────────────────────────────────────────────────────────
+    data_rows = []
+    target_ids = []
 
-    # Normalise axes shape for n==1
-    if n == 1:
-        axes = np.array([[axes[0]], [axes[1]]])
+    with open(filename, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 6 and int(parts[0]) % plot_ignore == 0:
+                data_rows.append([float(p) for p in parts[:5]])
+                target_ids.append(parts[5])
 
-    for k, fname in enumerate(filenames):
-        title = (titles[k] if titles and k < len(titles)
-                 else os.path.splitext(os.path.basename(fname))[0])
+    if not data_rows:
+        print(f"Warning: no data found in {filename}")
+        return None, None
 
-        title = "Run "+ str(int(title.split(".")[1]) + 1)
-        # Plot each run
-        plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
+    data = np.array(data_rows)
 
-        # Remove individual subplots' internal legends
-        if axes[0, k].get_legend():
-            axes[0, k].get_legend().remove()
-        if axes[1, k].get_legend():
-            axes[1, k].get_legend().remove()
+    t = data[:, 0]
+    population = data[:, 1]
+    min_dist = data[:, 2]
+    mean_dist = data[:, 3]
+    std_dist = data[:, 4]
 
-    # ── Gather distinct handles from the first column ────────────────────────
-    top_handles, top_labels = axes[0, 0].get_legend_handles_labels()
-    bot_handles, bot_labels = axes[1, 0].get_legend_handles_labels()
+    # ── B&W palette ───────────────────────────────────────────────────────────
+    COLOR_BG = 'white'
+    COLOR_SPINE = '#bbbbbb'
+    COLOR_GRID_MJ = '#cccccc'
+    COLOR_GRID_MN = '#e0e0e0'
+    COLOR_TICK = '#444444'
+    COLOR_LABEL = '#222222'
+    COLOR_LEGEND_BG = 'white'
+    COLOR_LEGEND_EDG = '#bbbbbb'
+    COLOR_LEGEND_TXT = '#222222'
 
-    # ── Render Top Right Legend (Fitness & Environment) ──────────────────────
-    leg_top = fig.legend(
-        handles=top_handles,
-        labels=top_labels,
-        loc='upper left',
-        bbox_to_anchor=(0.84, 0.88),  # Positioned to the right of the top row
-        facecolor='white',
-        edgecolor='#bbbbbb',
-        fontsize=10,
-        title="Hamming Distance & Environment",
-        title_fontsize=11
-    )
-    leg_top._legend_box.align = "left"
+    COLOR_MEAN_DIST = '#111111'
+    COLOR_MIN_DIST = '#000000'  # Minimum distance -> solid black text / line
+    COLOR_FILL_DIST = '#aaaaaa'
+    COLOR_POP_LINE = '#222222'
 
-    # ── Render Bottom Right Legend (Organism Size) ───────────────────────────
-    leg_bot = fig.legend(
-        handles=bot_handles,
-        labels=bot_labels,
-        loc='upper left',
-        bbox_to_anchor=(0.84, 0.45),  # Positioned to the right of the bottom row
-        facecolor='white',
-        edgecolor='#bbbbbb',
-        fontsize=10,
-        title="Organism Size",
-        title_fontsize=11
-    )
-    leg_bot._legend_box.align = "left"
+    # Environment track backgrounds (shown between 0 and -1)
+    COLOR_ENV_A = '#ffffff'  # Target A → white
+    COLOR_ENV_B = '#e8e8e8'  # Target B → light gray
 
-    # Use rect parameter to leave the right 16% of the canvas open for legends
-    fig.tight_layout(rect=[0.05, 0, 0.83, 1])
-    plt.show()
+    # ── figure setup ──────────────────────────────────────────────────────────
+    standalone = axes is None
+    if standalone:
+        if plot_population:
+            fig, (ax_top, ax_bot) = plt.subplots(
+                2, 1, figsize=(24, 8), sharex=True,
+                gridspec_kw={'height_ratios': [1.2, 1]}
+            )
+        else:
+            fig, ax_top = plt.subplots(1, 1, figsize=(24, 5))
+            ax_bot = None
+        fig.patch.set_facecolor(COLOR_BG)
+    else:
+        if isinstance(axes, (tuple, list, np.ndarray)) and len(axes) >= 2:
+            ax_top, ax_bot = axes[0], axes[1]
+        else:
+            ax_top = axes
+            ax_bot = None
+        fig = ax_top.get_figure()
 
-    return fig, axes
+    if plot_population and ax_bot is not None:
+        active_axes = [ax_top, ax_bot]
+    else:
+        active_axes = [ax_top]
+        if ax_bot is not None:
+            ax_bot.set_visible(False)
+
+    for ax in active_axes:
+        ax.set_facecolor(COLOR_BG)
+        for spine in ax.spines.values():
+            spine.set_edgecolor(COLOR_SPINE)
+
+        # ── environment shading & transitions ─────────────────────────────────────
+        env_handles = []
+        if len(target_ids) == len(t):
+            span_start = 0
+
+            # Get overall data timeline boundaries for normalization
+            t_start, t_end = (xlim[0], xlim[1]) if xlim is not None else (t[0], t[-1])
+            t_range = t_end - t_start
+
+            HATCH_A = '////'
+            HATCH_B = '..'
+
+            for k in range(1, len(t)):
+                changed = target_ids[k] != target_ids[k - 1]
+                last = k == len(t) - 1
+                if changed or last:
+                    span_end = k if changed else k + 1
+
+                    is_A = target_ids[span_start] == 'A'
+                    color = COLOR_ENV_A if is_A else COLOR_ENV_B
+                    hatch = HATCH_A if is_A else HATCH_B
+
+                    x_min_frac = (t[span_start] - t_start) / t_range
+                    x_max_frac = (t[span_end - 1] - t_start) / t_range
+
+                    for current_ax in active_axes:
+                        current_ax.axhspan(ymin=-1, ymax=0, xmin=x_min_frac, xmax=x_max_frac,
+                                           facecolor=color, hatch=hatch, edgecolor='#999999',
+                                           alpha=1.0, zorder=1)
+
+                        if changed:
+                            current_ax.axvline(x=t[span_end - 1], color="lightgray",
+                                               linestyle='--', linewidth=1.2, zorder=2)
+
+                    span_start = k
+
+            env_handles = [
+                Patch(facecolor=COLOR_ENV_A, hatch=HATCH_A, edgecolor=COLOR_SPINE, label='Target A'),
+                Patch(facecolor=COLOR_ENV_B, hatch=HATCH_B, edgecolor='#999999', label='Target B'),
+            ]
+
+    # ── top panel: Hamming distance ───────────────────────────────────────────
+    ax_top.fill_between(t,
+                        mean_dist - std_dist,
+                        mean_dist + std_dist,
+                        color="dimgray", alpha=0.4, linewidth=0,
+                        label='Mean ± STD', zorder=3)
+    ax_top.plot(t, mean_dist, color=COLOR_MEAN_DIST, linewidth=0.8,
+                label='Mean Hamming Distance', zorder=4)
+
+    # NEW: Minimum Hamming Distance Line (black dashed)
+    ax_top.plot(t, min_dist, color=COLOR_MIN_DIST, linewidth=0.8,
+                linestyle='--', label='Min Hamming Distance', zorder=4)
+
+    if xlim is not None:
+        ax_top.set_xlim(xlim[0], xlim[1])
+    else:
+        ax_top.set_xlim(t[0], t[-1])
+
+    # Enforce bottom constraint down to -1, dynamically or manually clamp top with ymax
+    ax_top.set_ylim(bottom=-1, top=ymax)
+    ax_top.yaxis.set_major_locator(ticker.AutoLocator())
+    ax_top.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+    # To this:
+    ax_top.grid(axis='y', which='major', color=COLOR_GRID_MJ, linewidth=0.8, zorder=0)
+    ax_top.grid(axis='y', which='minor', color=COLOR_GRID_MN, linewidth=0.4, zorder=0)
+    ax_top.tick_params(colors=COLOR_TICK, which='both')
+    ax_top.set_ylabel('Hamming Distance', color=COLOR_LABEL, fontsize=11)
+
+    if not plot_population:
+        ax_top.set_xlabel('Timestep', color=COLOR_LABEL, fontsize=11)
+
+    plot_title = title or os.path.splitext(os.path.basename(filename))[0]
+    ax_top.set_title(plot_title, color=COLOR_LABEL, fontsize=13, pad=10)
+
+    dist_handles, _ = ax_top.get_legend_handles_labels()
+    ax_top.legend(handles=env_handles + dist_handles,
+                  facecolor=COLOR_LEGEND_BG, edgecolor=COLOR_LEGEND_EDG,
+                  labelcolor=COLOR_LEGEND_TXT, fontsize=10)
+
+    # ── bottom panel: population size ─────────────────────────────────────────
+    if plot_population and ax_bot is not None:
+        ax_bot.plot(t, population, color=COLOR_POP_LINE, linewidth=1.8,
+                    label='Population Size', zorder=4)
+
+        if xlim is not None:
+            ax_bot.set_xlim(xlim[0], xlim[1])
+
+        ax_bot.set_ylim(bottom=-1)
+        ax_bot.yaxis.set_major_locator(ticker.AutoLocator())
+        ax_bot.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+        # To this:
+        ax_top.grid(axis='y', which='major', color=COLOR_GRID_MJ, linewidth=0.8, zorder=0)
+        ax_top.grid(axis='y', which='minor', color=COLOR_GRID_MN, linewidth=0.4, zorder=0)
+        ax_bot.tick_params(colors=COLOR_TICK, which='both')
+        ax_bot.set_xlabel('Timestep', color=COLOR_LABEL, fontsize=11)
+        ax_bot.set_ylabel('Population Size', color=COLOR_LABEL, fontsize=11)
+
+        pop_handles, _ = ax_bot.get_legend_handles_labels()
+        ax_bot.legend(handles=pop_handles,
+                      facecolor=COLOR_LEGEND_BG, edgecolor=COLOR_LEGEND_EDG,
+                      labelcolor=COLOR_LEGEND_TXT, fontsize=10)
+
+    if standalone:
+        fig.tight_layout()
+        plt.show()
+
+    return fig, (ax_top, ax_bot)
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SIMULATION RUNNER
@@ -315,7 +439,7 @@ def plot_runs(filenames: list, titles: list = None):
         title = "Run " + str(int(title.split(".")[1]) + 1)
 
         # Plot each run
-        plot_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
+        plot_GRN_run(fname, axes=(axes[0, k], axes[1, k]), title=title)
 
         # Hide y-axis labels for all columns except the first one
         if k > 0:
@@ -341,7 +465,7 @@ def plot_runs(filenames: list, titles: list = None):
         facecolor='white',
         edgecolor='#bbbbbb',
         fontsize=10,
-        title="Fitness",
+        title="Hamming Distance & Environment",
         title_fontsize=11
     )
     leg_top._legend_box.align = "left"
@@ -411,10 +535,10 @@ if __name__ == '__main__':
     # print(f"All runs finished in {time.time() - start:.1f}s")
 
     # ── plot ──────────────────────────────────────────────────────────────────
-    files = [(f"Data/{folder}/{EXPERIMENT_ID}.{i}.txt") for i in range(AMOUNT_OF_RUNS)]
+    files = [(f"GRN-data/Data-8.{i}.txt") for i in range(AMOUNT_OF_RUNS)]
 
     # Single run
-    # plot_run(files[4])
+    plot_GRN_run(files[1], title = "From t=5e5 to t=6e5.",plot_population=False, xlim=[500_000, 600_000])
 
     # All runs side by side (comment out if you only want one)
-    plot_runs(files)
+    # plot_runs(files)
